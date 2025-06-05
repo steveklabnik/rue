@@ -1,0 +1,12 @@
+[package]
+name = "rue"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "rue"
+path = "src/main.rs"
+
+[dependencies]
+rue-compiler = { path = "../rue-compiler" }
+rue-codegen = { path = "../rue-codegen" }

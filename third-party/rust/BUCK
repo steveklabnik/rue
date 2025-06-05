@@ -1,0 +1,11 @@
+# Third-party Rust dependencies
+
+rust_library(
+    name = "salsa",
+    srcs = [],
+    deps = [],
+    crate = "salsa",
+    # Buck2 doesn't handle external crates directly like Cargo does
+    # You'll need to vendor the dependency or use a Buck2 extension
+    # For now, this is a placeholder
+)
