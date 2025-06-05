@@ -1,0 +1,10 @@
+[package]
+name = "rue-compiler"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rue-ast = { path = "../rue-ast" }
+rue-lexer = { path = "../rue-lexer" }
+rue-parser = { path = "../rue-parser" }
+salsa = "0.22"

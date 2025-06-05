@@ -1,0 +1,7 @@
+[package]
+name = "rue-codegen"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rue-ast = { path = "../rue-ast" }

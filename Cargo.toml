@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rue-ast",
+    "crates/rue-lexer",
+    "crates/rue-parser",
+    "crates/rue-compiler",
+    "crates/rue-codegen",
+    "crates/rue",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"

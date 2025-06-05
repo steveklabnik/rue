@@ -1,0 +1,6 @@
+[package]
+name = "rue-ast"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

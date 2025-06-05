@@ -1,0 +1,61 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [ trunk ]
+  pull_request:
+    branches: [ trunk ]
+
+jobs:
+  benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install Buck2
+      uses: dtolnay/install-buck2@latest
+    
+    - name: Build release
+      run: cargo build --release
+    
+    - name: Lexer benchmarks
+      run: |
+        echo "Running lexer performance tests..."
+        # For now, just time the lexer tests
+        time cargo test -p rue-lexer --release
+    
+    - name: Compilation speed test
+      run: |
+        echo "Testing compilation speed..."
+        # Time how long it takes to build rue itself
+        cargo clean
+        time cargo build --release
+    
+    - name: Binary size check
+      run: |
+        echo "Checking binary size..."
+        ls -lh target/release/rue
+        # Future: set size limits and fail if exceeded
+    
+    - name: Buck2 build speed comparison
+      run: |
+        # Install reindeer for dependency management
+        cargo install --git https://github.com/facebookincubator/reindeer reindeer
+        
+        echo "Comparing build times: Cargo vs Buck2"
+        
+        # Clean build with Cargo
+        cargo clean
+        echo "Cargo build time:"
+        time cargo build --release
+        
+        # Clean build with Buck2
+        buck2 clean
+        echo "Buck2 build time:"
+        time buck2 build //crates/rue:rue
+        
+        echo "Note: Buck2 should be faster on incremental builds"
