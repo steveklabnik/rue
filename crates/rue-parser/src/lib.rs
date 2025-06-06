@@ -1,1 +1,594 @@
-// Parsing logic will go here
+use rue_ast::*;
+use rue_lexer::{Span, TokenKind};
+
+pub struct Parser {
+    tokens: Vec<TokenNode>,
+    current: usize,
+}
+
+pub type ParseResult<T> = Result<T, ParseError>;
+
+#[derive(Debug, Clone)]
+pub struct ParseError {
+    pub message: String,
+    pub span: Span,
+}
+
+impl Parser {
+    pub fn new(tokens: Vec<TokenNode>) -> Self {
+        Self { tokens, current: 0 }
+    }
+
+    pub fn parse(mut self) -> ParseResult<CstRoot> {
+        let mut items = Vec::new();
+        let leading_trivia = self.consume_trivia();
+
+        while !self.is_at_end() {
+            items.push(self.parse_item()?);
+        }
+
+        Ok(CstRoot {
+            items,
+            trivia: Trivia {
+                leading: leading_trivia,
+                trailing: vec![],
+            },
+        })
+    }
+
+    fn parse_item(&mut self) -> ParseResult<CstNode> {
+        match self.peek().kind {
+            TokenKind::Fn => Ok(CstNode::Function(Box::new(self.parse_function()?))),
+            _ => {
+                let stmt = self.parse_statement()?;
+                Ok(CstNode::Statement(Box::new(stmt)))
+            }
+        }
+    }
+
+    fn parse_function(&mut self) -> ParseResult<FunctionNode> {
+        let leading_trivia = self.consume_trivia();
+        let fn_token = self.expect_kind(&TokenKind::Fn)?;
+        let name = self.expect_ident()?;
+        let param_list = self.parse_param_list()?;
+        let body = self.parse_block()?;
+
+        Ok(FunctionNode {
+            fn_token,
+            name,
+            param_list,
+            body,
+            trivia: Trivia {
+                leading: leading_trivia,
+                trailing: self.consume_trivia(),
+            },
+        })
+    }
+
+    fn parse_param_list(&mut self) -> ParseResult<ParamListNode> {
+        let leading_trivia = self.consume_trivia();
+        let open_paren = self.expect_kind(&TokenKind::LeftParen)?;
+
+        let mut params = Vec::new();
+        if !self.check_kind(&TokenKind::RightParen) {
+            params.push(self.expect_ident()?);
+            // TODO: Handle multiple parameters with commas
+        }
+
+        let close_paren = self.expect_kind(&TokenKind::RightParen)?;
+
+        Ok(ParamListNode {
+            open_paren,
+            params,
+            close_paren,
+            trivia: Trivia {
+                leading: leading_trivia,
+                trailing: self.consume_trivia(),
+            },
+        })
+    }
+
+    fn parse_block(&mut self) -> ParseResult<BlockNode> {
+        let leading_trivia = self.consume_trivia();
+        let open_brace = self.expect_kind(&TokenKind::LeftBrace)?;
+
+        let mut statements = Vec::new();
+        while !self.check_kind(&TokenKind::RightBrace) && !self.is_at_end() {
+            statements.push(self.parse_statement()?);
+        }
+
+        let close_brace = self.expect_kind(&TokenKind::RightBrace)?;
+
+        Ok(BlockNode {
+            open_brace,
+            statements,
+            close_brace,
+            trivia: Trivia {
+                leading: leading_trivia,
+                trailing: self.consume_trivia(),
+            },
+        })
+    }
+
+    fn parse_statement(&mut self) -> ParseResult<StatementNode> {
+        match self.peek().kind {
+            TokenKind::Let => Ok(StatementNode::Let(self.parse_let_statement()?)),
+            TokenKind::If => Ok(StatementNode::If(Box::new(self.parse_if_statement()?))),
+            _ => Ok(StatementNode::Expression(self.parse_expression()?)),
+        }
+    }
+
+    fn parse_let_statement(&mut self) -> ParseResult<LetStatementNode> {
+        let leading_trivia = self.consume_trivia();
+        let let_token = self.expect_kind(&TokenKind::Let)?;
+        let name = self.expect_ident()?;
+        let equals = self.expect_kind(&TokenKind::Assign)?;
+        let value = self.parse_expression()?;
+
+        Ok(LetStatementNode {
+            let_token,
+            name,
+            equals,
+            value,
+            trivia: Trivia {
+                leading: leading_trivia,
+                trailing: self.consume_trivia(),
+            },
+        })
+    }
+
+    fn parse_if_statement(&mut self) -> ParseResult<IfStatementNode> {
+        let leading_trivia = self.consume_trivia();
+        let if_token = self.expect_kind(&TokenKind::If)?;
+        let condition = self.parse_expression()?;
+        let then_block = self.parse_block()?;
+
+        let else_clause = if self.check_kind(&TokenKind::Else) {
+            Some(self.parse_else_clause()?)
+        } else {
+            None
+        };
+
+        Ok(IfStatementNode {
+            if_token,
+            condition,
+            then_block,
+            else_clause,
+            trivia: Trivia {
+                leading: leading_trivia,
+                trailing: self.consume_trivia(),
+            },
+        })
+    }
+
+    fn parse_else_clause(&mut self) -> ParseResult<ElseClauseNode> {
+        let leading_trivia = self.consume_trivia();
+        let else_token = self.expect_kind(&TokenKind::Else)?;
+
+        let body = if self.check_kind(&TokenKind::If) {
+            ElseBodyNode::If(Box::new(self.parse_if_statement()?))
+        } else {
+            ElseBodyNode::Block(self.parse_block()?)
+        };
+
+        Ok(ElseClauseNode {
+            else_token,
+            body,
+            trivia: Trivia {
+                leading: leading_trivia,
+                trailing: self.consume_trivia(),
+            },
+        })
+    }
+
+    fn parse_expression(&mut self) -> ParseResult<ExpressionNode> {
+        self.parse_comparison()
+    }
+
+    fn parse_comparison(&mut self) -> ParseResult<ExpressionNode> {
+        let mut expr = self.parse_addition()?;
+
+        while self.check_kind(&TokenKind::LessEqual) {
+            let leading_trivia = self.consume_trivia();
+            let operator = self.advance();
+            let right = self.parse_addition()?;
+            expr = ExpressionNode::Binary(BinaryExprNode {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+                trivia: Trivia {
+                    leading: leading_trivia,
+                    trailing: self.consume_trivia(),
+                },
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_addition(&mut self) -> ParseResult<ExpressionNode> {
+        let mut expr = self.parse_multiplication()?;
+
+        while self.check_kind(&TokenKind::Plus) || self.check_kind(&TokenKind::Minus) {
+            let leading_trivia = self.consume_trivia();
+            let operator = self.advance();
+            let right = self.parse_multiplication()?;
+            expr = ExpressionNode::Binary(BinaryExprNode {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+                trivia: Trivia {
+                    leading: leading_trivia,
+                    trailing: self.consume_trivia(),
+                },
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_multiplication(&mut self) -> ParseResult<ExpressionNode> {
+        let mut expr = self.parse_call()?;
+
+        while self.check_kind(&TokenKind::Star)
+            || self.check_kind(&TokenKind::Slash)
+            || self.check_kind(&TokenKind::Percent)
+        {
+            let leading_trivia = self.consume_trivia();
+            let operator = self.advance();
+            let right = self.parse_call()?;
+            expr = ExpressionNode::Binary(BinaryExprNode {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+                trivia: Trivia {
+                    leading: leading_trivia,
+                    trailing: self.consume_trivia(),
+                },
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_call(&mut self) -> ParseResult<ExpressionNode> {
+        let mut expr = self.parse_primary()?;
+
+        while self.check_kind(&TokenKind::LeftParen) {
+            let leading_trivia = self.consume_trivia();
+            let open_paren = self.advance();
+
+            let mut args = Vec::new();
+            if !self.check_kind(&TokenKind::RightParen) {
+                args.push(self.parse_expression()?);
+                // TODO: Handle multiple arguments with commas
+            }
+
+            let close_paren = self.expect_kind(&TokenKind::RightParen)?;
+
+            expr = ExpressionNode::Call(CallExprNode {
+                function: Box::new(expr),
+                open_paren,
+                args,
+                close_paren,
+                trivia: Trivia {
+                    leading: leading_trivia,
+                    trailing: self.consume_trivia(),
+                },
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_primary(&mut self) -> ParseResult<ExpressionNode> {
+        match &self.peek().kind {
+            TokenKind::Integer(_) => Ok(ExpressionNode::Literal(self.advance())),
+            TokenKind::Ident(_) => Ok(ExpressionNode::Identifier(self.advance())),
+            TokenKind::LeftParen => {
+                self.advance(); // consume '('
+                let expr = self.parse_expression()?;
+                self.expect_kind(&TokenKind::RightParen)?;
+                Ok(expr)
+            }
+            _ => Err(ParseError {
+                message: format!("Unexpected token: {:?}", self.peek().kind),
+                span: self.peek().span,
+            }),
+        }
+    }
+
+    // Helper methods
+    fn peek(&self) -> &TokenNode {
+        self.tokens.get(self.current).unwrap_or(&TokenNode {
+            kind: TokenKind::Eof,
+            span: rue_lexer::Span { start: 0, end: 0 },
+        })
+    }
+
+    fn advance(&mut self) -> TokenNode {
+        if !self.is_at_end() {
+            self.current += 1;
+        }
+        self.tokens.get(self.current - 1).unwrap().clone()
+    }
+
+    fn check_kind(&self, kind: &TokenKind) -> bool {
+        std::mem::discriminant(&self.peek().kind) == std::mem::discriminant(kind)
+    }
+
+    fn expect_kind(&mut self, kind: &TokenKind) -> ParseResult<TokenNode> {
+        if self.check_kind(kind) {
+            Ok(self.advance())
+        } else {
+            Err(ParseError {
+                message: format!("Expected {:?}, found {:?}", kind, self.peek().kind),
+                span: self.peek().span,
+            })
+        }
+    }
+
+    fn expect_ident(&mut self) -> ParseResult<TokenNode> {
+        match &self.peek().kind {
+            TokenKind::Ident(_) => Ok(self.advance()),
+            _ => Err(ParseError {
+                message: format!("Expected identifier, found {:?}", self.peek().kind),
+                span: self.peek().span,
+            }),
+        }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.current >= self.tokens.len() || self.peek().kind == TokenKind::Eof
+    }
+
+    fn consume_trivia(&mut self) -> Vec<TokenNode> {
+        // Note: lexer already skips whitespace, so no trivia to consume for now
+        // TODO: Handle comments when lexer supports them
+        Vec::new()
+    }
+}
+
+pub fn parse(tokens: Vec<TokenNode>) -> ParseResult<CstRoot> {
+    Parser::new(tokens).parse()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rue_lexer::Lexer;
+
+    fn lex_and_parse(source: &str) -> ParseResult<CstRoot> {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize();
+        parse(tokens)
+    }
+
+    #[test]
+    fn test_simple_number() {
+        let result = lex_and_parse("42");
+        assert!(result.is_ok());
+        let cst = result.unwrap();
+        assert_eq!(cst.items.len(), 1);
+
+        match &cst.items[0] {
+            CstNode::Statement(stmt) => match &**stmt {
+                StatementNode::Expression(ExpressionNode::Literal(token)) => match &token.kind {
+                    TokenKind::Integer(value) => assert_eq!(*value, 42),
+                    _ => panic!("Expected integer token"),
+                },
+                _ => panic!("Expected expression statement with literal"),
+            },
+            _ => panic!("Expected statement"),
+        }
+    }
+
+    #[test]
+    fn test_simple_identifier() {
+        let result = lex_and_parse("foo");
+        assert!(result.is_ok());
+        let cst = result.unwrap();
+        assert_eq!(cst.items.len(), 1);
+
+        match &cst.items[0] {
+            CstNode::Statement(stmt) => match &**stmt {
+                StatementNode::Expression(ExpressionNode::Identifier(token)) => match &token.kind {
+                    TokenKind::Ident(name) => assert_eq!(name, "foo"),
+                    _ => panic!("Expected identifier token"),
+                },
+                _ => panic!("Expected expression statement with identifier"),
+            },
+            _ => panic!("Expected statement"),
+        }
+    }
+
+    #[test]
+    fn test_binary_expression() {
+        let result = lex_and_parse("2 + 3");
+        assert!(result.is_ok());
+        let cst = result.unwrap();
+        assert_eq!(cst.items.len(), 1);
+
+        match &cst.items[0] {
+            CstNode::Statement(stmt) => match &**stmt {
+                StatementNode::Expression(ExpressionNode::Binary(binary)) => {
+                    // Check left operand
+                    match &*binary.left {
+                        ExpressionNode::Literal(token) => match &token.kind {
+                            TokenKind::Integer(value) => assert_eq!(*value, 2),
+                            _ => panic!("Expected integer token for left operand"),
+                        },
+                        _ => panic!("Expected literal for left operand"),
+                    }
+
+                    // Check operator
+                    assert_eq!(binary.operator.kind, TokenKind::Plus);
+
+                    // Check right operand
+                    match &*binary.right {
+                        ExpressionNode::Literal(token) => match &token.kind {
+                            TokenKind::Integer(value) => assert_eq!(*value, 3),
+                            _ => panic!("Expected integer token for right operand"),
+                        },
+                        _ => panic!("Expected literal for right operand"),
+                    }
+                }
+                _ => panic!("Expected binary expression"),
+            },
+            _ => panic!("Expected statement"),
+        }
+    }
+
+    #[test]
+    fn test_function_call() {
+        let result = lex_and_parse("factorial(5)");
+        assert!(result.is_ok());
+        let cst = result.unwrap();
+        assert_eq!(cst.items.len(), 1);
+
+        match &cst.items[0] {
+            CstNode::Statement(stmt) => match &**stmt {
+                StatementNode::Expression(ExpressionNode::Call(call)) => {
+                    // Check function name
+                    match &*call.function {
+                        ExpressionNode::Identifier(token) => match &token.kind {
+                            TokenKind::Ident(name) => assert_eq!(name, "factorial"),
+                            _ => panic!("Expected identifier token for function name"),
+                        },
+                        _ => panic!("Expected identifier for function name"),
+                    }
+
+                    // Check arguments
+                    assert_eq!(call.args.len(), 1);
+                    match &call.args[0] {
+                        ExpressionNode::Literal(token) => match &token.kind {
+                            TokenKind::Integer(value) => assert_eq!(*value, 5),
+                            _ => panic!("Expected integer token for argument"),
+                        },
+                        _ => panic!("Expected literal for argument"),
+                    }
+                }
+                _ => panic!("Expected function call"),
+            },
+            _ => panic!("Expected statement"),
+        }
+    }
+
+    #[test]
+    fn test_let_statement() {
+        let result = lex_and_parse("let x = 42");
+        assert!(result.is_ok());
+        let cst = result.unwrap();
+        assert_eq!(cst.items.len(), 1);
+
+        match &cst.items[0] {
+            CstNode::Statement(stmt) => match &**stmt {
+                StatementNode::Let(let_stmt) => {
+                    // Check variable name
+                    match &let_stmt.name.kind {
+                        TokenKind::Ident(name) => assert_eq!(name, "x"),
+                        _ => panic!("Expected identifier token for variable name"),
+                    }
+
+                    // Check value
+                    match &let_stmt.value {
+                        ExpressionNode::Literal(token) => match &token.kind {
+                            TokenKind::Integer(value) => assert_eq!(*value, 42),
+                            _ => panic!("Expected integer token for value"),
+                        },
+                        _ => panic!("Expected literal for value"),
+                    }
+                }
+                _ => panic!("Expected let statement"),
+            },
+            _ => panic!("Expected statement"),
+        }
+    }
+
+    #[test]
+    fn test_simple_function() {
+        let result = lex_and_parse("fn test(x) { x }");
+        assert!(result.is_ok());
+        let cst = result.unwrap();
+        assert_eq!(cst.items.len(), 1);
+
+        match &cst.items[0] {
+            CstNode::Function(func) => {
+                // Check function name
+                match &func.name.kind {
+                    TokenKind::Ident(name) => assert_eq!(name, "test"),
+                    _ => panic!("Expected identifier token for function name"),
+                }
+
+                // Check parameter
+                assert_eq!(func.param_list.params.len(), 1);
+                match &func.param_list.params[0].kind {
+                    TokenKind::Ident(name) => assert_eq!(name, "x"),
+                    _ => panic!("Expected identifier token for parameter"),
+                }
+
+                // Check body has one statement
+                assert_eq!(func.body.statements.len(), 1);
+            }
+            _ => panic!("Expected function"),
+        }
+    }
+
+    #[test]
+    fn test_factorial_example() {
+        let source = r#"
+fn factorial(n) {
+    if n <= 1 {
+        1
+    } else {
+        n * factorial(n - 1)
+    }
+}
+
+fn main() {
+    factorial(5)
+}
+        "#;
+
+        let result = lex_and_parse(source);
+        assert!(result.is_ok());
+        let cst = result.unwrap();
+        assert_eq!(cst.items.len(), 2); // factorial function + main function
+
+        // Check factorial function
+        match &cst.items[0] {
+            CstNode::Function(func) => {
+                match &func.name.kind {
+                    TokenKind::Ident(name) => assert_eq!(name, "factorial"),
+                    _ => panic!("Expected identifier token for factorial function name"),
+                }
+
+                // Check that the body contains an if statement
+                assert_eq!(func.body.statements.len(), 1);
+                match &func.body.statements[0] {
+                    StatementNode::If(_) => {} // Success
+                    _ => panic!("Expected if statement in factorial function"),
+                }
+            }
+            _ => panic!("Expected factorial function"),
+        }
+
+        // Check main function
+        match &cst.items[1] {
+            CstNode::Function(func) => {
+                match &func.name.kind {
+                    TokenKind::Ident(name) => assert_eq!(name, "main"),
+                    _ => panic!("Expected identifier token for main function name"),
+                }
+
+                // Check that the body contains a function call
+                assert_eq!(func.body.statements.len(), 1);
+                match &func.body.statements[0] {
+                    StatementNode::Expression(ExpressionNode::Call(_)) => {} // Success
+                    _ => panic!("Expected function call in main function"),
+                }
+            }
+            _ => panic!("Expected main function"),
+        }
+    }
+}

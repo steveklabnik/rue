@@ -5,5 +5,8 @@ cargo.rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_root = "src/lib.rs",
     edition = "2021",
+    deps = [
+        "//crates/rue-lexer:rue-lexer",
+    ],
     visibility = ["PUBLIC"],
 )
