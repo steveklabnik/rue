@@ -17,7 +17,14 @@ For complete language and implementation details, see [spec.md](./spec.md).
 
 ## Development Commands
 
-*To be added once Buck2 build configuration is set up*
+### Building
+- `buck2 build //crates/rue:rue` - Build the main rue compiler
+- `buck2 build //crates/...` - Build all crates
+
+### Testing  
+- `buck2 test //crates/...` - Run all tests
+- `buck2 test //crates/rue-lexer:test` - Run lexer tests
+- `buck2 test //crates/rue-parser:test` - Run parser tests
 
 ## Architecture
 
