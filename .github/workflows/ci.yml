@@ -82,8 +82,8 @@ jobs:
     - name: Buck2 build
       run: buck2 build //crates/rue:rue
     
-    - name: Buck2 test (lexer)
-      run: cargo test -p rue-lexer  # Buck2 test support coming later
+    - name: Buck2 test
+      run: buck2 test //crates/...
     
     - name: Buck2 run
       run: buck2 run //crates/rue:rue

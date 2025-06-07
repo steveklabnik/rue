@@ -13,3 +13,16 @@ cargo.rust_library(
     ],
     visibility = ["PUBLIC"],
 )
+
+rust_test(
+    name = "test",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/lib.rs",
+    edition = "2024",
+    deps = [
+        "//crates/rue-ast:rue-ast",
+        "//crates/rue-lexer:rue-lexer",
+        "//crates/rue-parser:rue-parser",
+        "//:salsa",
+    ],
+)

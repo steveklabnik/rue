@@ -7,3 +7,10 @@ cargo.rust_library(
     edition = "2021",
     visibility = ["PUBLIC"],
 )
+
+rust_test(
+    name = "test",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/lib.rs",
+    edition = "2021",
+)
