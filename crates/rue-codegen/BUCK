@@ -7,6 +7,9 @@ cargo.rust_library(
     edition = "2024",
     deps = [
         "//crates/rue-ast:rue-ast",
+        "//crates/rue-lexer:rue-lexer",
+        "//crates/rue-parser:rue-parser",
+        "//crates/rue-semantic:rue-semantic",
     ],
     visibility = ["PUBLIC"],
 )
@@ -18,5 +21,8 @@ rust_test(
     edition = "2024",
     deps = [
         "//crates/rue-ast:rue-ast",
+        "//crates/rue-lexer:rue-lexer",
+        "//crates/rue-parser:rue-parser",
+        "//crates/rue-semantic:rue-semantic",
     ],
 )

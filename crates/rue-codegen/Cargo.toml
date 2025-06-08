@@ -5,3 +5,6 @@ edition.workspace = true
 
 [dependencies]
 rue-ast = { path = "../rue-ast" }
+rue-lexer = { path = "../rue-lexer" }
+rue-parser = { path = "../rue-parser" }
+rue-semantic = { path = "../rue-semantic" }
