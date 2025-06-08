@@ -1,4 +1,5 @@
 use rue_ast::CstRoot;
+use rue_codegen::compile_to_executable;
 use rue_parser::ParseError;
 use rue_semantic::{SemanticError, analyze_cst};
 use std::sync::Arc;
@@ -249,5 +250,97 @@ fn main() {
 
         let result = analyze_file(&db, file);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_compile_simple_program() {
+        let db = RueDatabase::default();
+
+        let file = SourceFile::new(
+            &db,
+            "test.rue".to_string(),
+            r#"
+fn main() {
+    42
+}
+"#
+            .to_string(),
+        );
+
+        let result = compile_file(&db, file);
+        assert!(result.is_ok());
+
+        let executable = result.unwrap();
+        // Should be a valid ELF executable
+        assert_eq!(&executable[0..4], &[0x7f, 0x45, 0x4c, 0x46]);
+    }
+
+    #[test]
+    fn test_compile_factorial() {
+        let db = RueDatabase::default();
+
+        let file = SourceFile::new(
+            &db,
+            "factorial.rue".to_string(),
+            r#"
+fn factorial(n) {
+    if n <= 1 {
+        1
+    } else {
+        n * factorial(n - 1)
+    }
+}
+
+fn main() {
+    factorial(5)
+}
+"#
+            .to_string(),
+        );
+
+        let result = compile_file(&db, file);
+        assert!(result.is_ok());
+
+        let executable = result.unwrap();
+        // Should be a valid ELF executable
+        assert_eq!(&executable[0..4], &[0x7f, 0x45, 0x4c, 0x46]);
+        assert!(executable.len() > 200); // Should be reasonable size
+    }
+}
+
+// Simplified compilation error for Salsa
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompileError {
+    pub message: String,
+}
+
+#[salsa::tracked]
+pub fn compile_file(
+    db: &dyn salsa::Database,
+    file: SourceFile,
+) -> Result<Arc<Vec<u8>>, Arc<CompileError>> {
+    // Parse and analyze the file first
+    let scope = match analyze_file(db, file) {
+        Ok(scope) => scope,
+        Err(semantic_error) => {
+            return Err(Arc::new(CompileError {
+                message: format!("Semantic error: {}", semantic_error.message),
+            }));
+        }
+    };
+
+    let ast = match parse_file(db, file) {
+        Ok(ast) => ast,
+        Err(parse_error) => {
+            return Err(Arc::new(CompileError {
+                message: format!("Parse error: {}", parse_error.message),
+            }));
+        }
+    };
+
+    // Generate executable
+    match compile_to_executable(&ast, &scope) {
+        Ok(executable) => Ok(Arc::new(executable)),
+        Err(e) => Err(Arc::new(CompileError { message: e.message })),
     }
 }
