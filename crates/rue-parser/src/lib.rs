@@ -8,7 +8,7 @@ pub struct Parser {
 
 pub type ParseResult<T> = Result<T, ParseError>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParseError {
     pub message: String,
     pub span: Span,
