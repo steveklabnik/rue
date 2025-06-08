@@ -1,5 +1,5 @@
 [package]
-name = "rue-compiler"
+name = "rue-semantic"
 version.workspace = true
 edition.workspace = true
 
@@ -7,5 +7,4 @@ edition.workspace = true
 rue-ast = { path = "../rue-ast" }
 rue-lexer = { path = "../rue-lexer" }
 rue-parser = { path = "../rue-parser" }
-rue-semantic = { path = "../rue-semantic" }
 salsa = "0.22"

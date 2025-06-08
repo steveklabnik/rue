@@ -4,6 +4,7 @@ members = [
     "crates/rue-ast",
     "crates/rue-lexer",
     "crates/rue-parser",
+    "crates/rue-semantic",
     "crates/rue-compiler",
     "crates/rue-codegen",
     "crates/rue",
