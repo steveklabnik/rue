@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rue is a programming language that starts as a minimal subset of Rust, designed to explore cutting-edge compiler implementation techniques. The compiler is written in Rust and uses Buck2 as its build system.
 
+**Platform Support**: Linux x86-64 only (generates ELF executables)
+
 Key features:
 - Compiles to x86-64 native code (ELF executables)
 - Incremental compilation using Salsa
@@ -26,17 +28,20 @@ For complete language and implementation details, see [spec.md](./spec.md).
 - `buck2 test //crates/rue-parser:test` - Run parser tests
 - `buck2 test //crates/rue-semantic:test` - Run semantic analysis tests
 - `buck2 test //crates/rue-codegen:test` - Run code generation tests
+- `buck2 test //crates/rue:test` - Run basic sample validation tests
+- `cargo test -p rue` - Run end-to-end integration tests (compile and execute samples)
 - `cargo test -p rue-lsp` - Run LSP server tests (Buck2 has third-party dependency compilation issues)
+- `cargo test` - Run all tests across all packages
 
 ### Compiling and Running Programs
-- `buck2 run //crates/rue:rue simple.rue` - Compile simple.rue to executable
+- `buck2 run //crates/rue:rue samples/simple.rue` - Compile simple.rue to executable
 - `buck2 run //crates/rue:rue <source.rue>` - Compile any rue source file
 - `./simple` - Run the compiled executable (after compilation)
 
 ### Example Programs
-- `simple.rue` - Basic program that returns 42
-- `factorial.rue` - Recursive factorial function (returns 120 for factorial(5))
-- Test compilation: `buck2 run //crates/rue:rue simple.rue && ./simple && echo "Exit code: $?"`
+- `samples/simple.rue` - Basic program that returns 42
+- `samples/factorial.rue` - Recursive factorial function (returns 120 for factorial(5))
+- Test compilation: `buck2 run //crates/rue:rue samples/simple.rue && ./simple && echo "Exit code: $?"`
 
 ### LSP and IDE Support
 - `cargo run -p rue-lsp` - Start the Language Server Protocol server
@@ -90,7 +95,7 @@ When compiled programs crash or behave unexpectedly:
 
 ### CI/CD Notes
 - The rue compiler requires a source file argument - it cannot run with no arguments
-- CI tests should use: `buck2 run //crates/rue:rue simple.rue` 
+- CI tests should use: `buck2 run //crates/rue:rue samples/simple.rue` 
 - Integration tests should compile and run programs to verify correctness
 - Always test both buck2 and cargo build systems for consistency
 
