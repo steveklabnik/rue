@@ -84,3 +84,30 @@ This project uses jj (Jujutsu) instead of git. Common commands:
 - `jj status` - see current changes
 - `jj commit -m "message"` - commit changes
 - `jj log` - view commit history
+
+### Reindeer and Buck2 Dependency Management
+
+Reindeer is used to convert Cargo.toml dependencies to Buck2 build files. Key commands and workflows:
+
+**Basic Usage:**
+- `reindeer buckify` - Generate Buck2 build files from Cargo dependencies
+- Must be run after any changes to Cargo.toml or fixups/
+- Warnings about build scripts indicate missing fixups
+
+**Fixup Management:**
+When adding new dependencies or getting build script warnings from `reindeer buckify`, check these repositories for existing fixup examples:
+- https://github.com/dtolnay/buck2-rustc-bootstrap/tree/master/fixups - Official Rust bootstrap fixups
+- https://github.com/gilescope/buck2-fixups/tree/main/fixups - Community-maintained fixups
+
+**Important:** Always run `reindeer buckify` again after creating or modifying fixups to regenerate build files.
+
+**Common fixup patterns:**
+- `buildscript.run = true/false` - Whether to run the crate's build script
+- `cargo_env = true` - Provide Cargo environment variables (e.g., CARGO_PKG_NAME) to build scripts
+
+**Workflow for new dependencies:**
+1. Add dependency to Cargo.toml
+2. Run `reindeer buckify` - note any warnings
+3. Create fixups/ directories and fixups.toml files for warned crates
+4. Run `reindeer buckify` again to apply fixups
+5. Test with `buck2 test //crates/...`
