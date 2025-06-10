@@ -22,6 +22,23 @@ cargo.rust_library(
 )
 
 http_archive(
+    name = "autocfg-1.4.0.crate",
+    sha256 = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26",
+    strip_prefix = "autocfg-1.4.0",
+    urls = ["https://static.crates.io/crates/autocfg/1.4.0/download"],
+    visibility = [],
+)
+
+cargo.rust_library(
+    name = "autocfg-1.4.0",
+    srcs = [":autocfg-1.4.0.crate"],
+    crate = "autocfg",
+    crate_root = "autocfg-1.4.0.crate/src/lib.rs",
+    edition = "2015",
+    visibility = [],
+)
+
+http_archive(
     name = "boxcar-0.2.12.crate",
     sha256 = "66bb12751a83493ef4b8da1120451a262554e216a247f14b48cb5e8fe7ed8bdf",
     strip_prefix = "boxcar-0.2.12",
@@ -39,18 +56,18 @@ cargo.rust_library(
 )
 
 http_archive(
-    name = "cfg-if-1.0.0.crate",
-    sha256 = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd",
-    strip_prefix = "cfg-if-1.0.0",
-    urls = ["https://static.crates.io/crates/cfg-if/1.0.0/download"],
+    name = "cfg-if-1.0.1.crate",
+    sha256 = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268",
+    strip_prefix = "cfg-if-1.0.1",
+    urls = ["https://static.crates.io/crates/cfg-if/1.0.1/download"],
     visibility = [],
 )
 
 cargo.rust_library(
-    name = "cfg-if-1.0.0",
-    srcs = [":cfg-if-1.0.0.crate"],
+    name = "cfg-if-1.0.1",
+    srcs = [":cfg-if-1.0.1.crate"],
     crate = "cfg_if",
-    crate_root = "cfg-if-1.0.0.crate/src/lib.rs",
+    crate_root = "cfg-if-1.0.1.crate/src/lib.rs",
     edition = "2018",
     visibility = [],
 )
@@ -163,7 +180,7 @@ cargo.rust_library(
     features = ["raw-api"],
     visibility = [],
     deps = [
-        ":cfg-if-1.0.0",
+        ":cfg-if-1.0.1",
         ":crossbeam-utils-0.8.21",
         ":hashbrown-0.14.5",
         ":lock_api-0.4.13",
@@ -242,18 +259,18 @@ cargo.rust_library(
 )
 
 http_archive(
-    name = "hashbrown-0.15.3.crate",
-    sha256 = "84b26c544d002229e640969970a2e74021aadf6e2f96372b9c58eff97de08eb3",
-    strip_prefix = "hashbrown-0.15.3",
-    urls = ["https://static.crates.io/crates/hashbrown/0.15.3/download"],
+    name = "hashbrown-0.15.4.crate",
+    sha256 = "5971ac85611da7067dbfcabef3c70ebb5606018acd9e2a3903a0da507521e0d5",
+    strip_prefix = "hashbrown-0.15.4",
+    urls = ["https://static.crates.io/crates/hashbrown/0.15.4/download"],
     visibility = [],
 )
 
 cargo.rust_library(
-    name = "hashbrown-0.15.3",
-    srcs = [":hashbrown-0.15.3.crate"],
+    name = "hashbrown-0.15.4",
+    srcs = [":hashbrown-0.15.4.crate"],
     crate = "hashbrown",
-    crate_root = "hashbrown-0.15.3.crate/src/lib.rs",
+    crate_root = "hashbrown-0.15.4.crate/src/lib.rs",
     edition = "2021",
     features = [
         "allocator-api2",
@@ -286,7 +303,7 @@ cargo.rust_library(
     crate_root = "hashlink-0.10.0.crate/src/lib.rs",
     edition = "2018",
     visibility = [],
-    deps = [":hashbrown-0.15.3"],
+    deps = [":hashbrown-0.15.4"],
 )
 
 http_archive(
@@ -327,7 +344,7 @@ cargo.rust_library(
     visibility = [],
     deps = [
         ":equivalent-1.0.2",
-        ":hashbrown-0.15.3",
+        ":hashbrown-0.15.4",
     ],
 )
 
@@ -345,11 +362,39 @@ cargo.rust_library(
     crate = "libc",
     crate_root = "libc-0.2.172.crate/src/lib.rs",
     edition = "2021",
+    env = {
+        "OUT_DIR": "$(location :libc-0.2.172-build-script-run[out_dir])",
+    },
+    features = [
+        "default",
+        "std",
+    ],
+    rustc_flags = ["@$(location :libc-0.2.172-build-script-run[rustc_flags])"],
+    visibility = [],
+)
+
+cargo.rust_binary(
+    name = "libc-0.2.172-build-script-build",
+    srcs = [":libc-0.2.172.crate"],
+    crate = "build_script_build",
+    crate_root = "libc-0.2.172.crate/build.rs",
+    edition = "2021",
     features = [
         "default",
         "std",
     ],
     visibility = [],
+)
+
+buildscript_run(
+    name = "libc-0.2.172-build-script-run",
+    package_name = "libc",
+    buildscript_rule = ":libc-0.2.172-build-script-build",
+    features = [
+        "default",
+        "std",
+    ],
+    version = "0.2.172",
 )
 
 http_archive(
@@ -366,12 +411,41 @@ cargo.rust_library(
     crate = "lock_api",
     crate_root = "lock_api-0.4.13.crate/src/lib.rs",
     edition = "2021",
+    env = {
+        "OUT_DIR": "$(location :lock_api-0.4.13-build-script-run[out_dir])",
+    },
+    features = [
+        "atomic_usize",
+        "default",
+    ],
+    rustc_flags = ["@$(location :lock_api-0.4.13-build-script-run[rustc_flags])"],
+    visibility = [],
+    deps = [":scopeguard-1.2.0"],
+)
+
+cargo.rust_binary(
+    name = "lock_api-0.4.13-build-script-build",
+    srcs = [":lock_api-0.4.13.crate"],
+    crate = "build_script_build",
+    crate_root = "lock_api-0.4.13.crate/build.rs",
+    edition = "2021",
     features = [
         "atomic_usize",
         "default",
     ],
     visibility = [],
-    deps = [":scopeguard-1.2.0"],
+    deps = [":autocfg-1.4.0"],
+)
+
+buildscript_run(
+    name = "lock_api-0.4.13-build-script-run",
+    package_name = "lock_api",
+    buildscript_rule = ":lock_api-0.4.13-build-script-build",
+    features = [
+        "atomic_usize",
+        "default",
+    ],
+    version = "0.4.13",
 )
 
 http_archive(
@@ -433,6 +507,9 @@ cargo.rust_library(
     crate = "parking_lot_core",
     crate_root = "parking_lot_core-0.9.11.crate/src/lib.rs",
     edition = "2021",
+    env = {
+        "OUT_DIR": "$(location :parking_lot_core-0.9.11-build-script-run[out_dir])",
+    },
     platform = {
         "linux-arm64": dict(
             deps = [":libc-0.2.172"],
@@ -453,11 +530,28 @@ cargo.rust_library(
             deps = [":windows-targets-0.52.6"],
         ),
     },
+    rustc_flags = ["@$(location :parking_lot_core-0.9.11-build-script-run[rustc_flags])"],
     visibility = [],
     deps = [
-        ":cfg-if-1.0.0",
-        ":smallvec-1.15.0",
+        ":cfg-if-1.0.1",
+        ":smallvec-1.15.1",
     ],
+)
+
+cargo.rust_binary(
+    name = "parking_lot_core-0.9.11-build-script-build",
+    srcs = [":parking_lot_core-0.9.11.crate"],
+    crate = "build_script_build",
+    crate_root = "parking_lot_core-0.9.11.crate/build.rs",
+    edition = "2021",
+    visibility = [],
+)
+
+buildscript_run(
+    name = "parking_lot_core-0.9.11-build-script-run",
+    package_name = "parking_lot_core",
+    buildscript_rule = ":parking_lot_core-0.9.11-build-script-build",
+    version = "0.9.11",
 )
 
 http_archive(
@@ -478,24 +572,85 @@ cargo.rust_library(
 )
 
 http_archive(
-    name = "portable-atomic-1.11.0.crate",
-    sha256 = "350e9b48cbc6b0e028b0473b114454c6316e57336ee184ceab6e53f72c178b3e",
-    strip_prefix = "portable-atomic-1.11.0",
-    urls = ["https://static.crates.io/crates/portable-atomic/1.11.0/download"],
+    name = "portable-atomic-1.11.1.crate",
+    sha256 = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483",
+    strip_prefix = "portable-atomic-1.11.1",
+    urls = ["https://static.crates.io/crates/portable-atomic/1.11.1/download"],
     visibility = [],
 )
 
 cargo.rust_library(
-    name = "portable-atomic-1.11.0",
-    srcs = [":portable-atomic-1.11.0.crate"],
+    name = "portable-atomic-1.11.1",
+    srcs = [":portable-atomic-1.11.1.crate"],
     crate = "portable_atomic",
-    crate_root = "portable-atomic-1.11.0.crate/src/lib.rs",
+    crate_root = "portable-atomic-1.11.1.crate/src/lib.rs",
     edition = "2018",
+    env = {
+        "CARGO_CRATE_NAME": "portable_atomic",
+        "CARGO_MANIFEST_DIR": "portable-atomic-1.11.1.crate",
+        "CARGO_PKG_AUTHORS": "",
+        "CARGO_PKG_DESCRIPTION": "Portable atomic types including support for 128-bit atomics, atomic float, etc.\n",
+        "CARGO_PKG_NAME": "portable-atomic",
+        "CARGO_PKG_REPOSITORY": "https://github.com/taiki-e/portable-atomic",
+        "CARGO_PKG_VERSION": "1.11.1",
+        "CARGO_PKG_VERSION_MAJOR": "1",
+        "CARGO_PKG_VERSION_MINOR": "11",
+        "CARGO_PKG_VERSION_PATCH": "1",
+        "CARGO_PKG_VERSION_PRE": "",
+        "OUT_DIR": "$(location :portable-atomic-1.11.1-build-script-run[out_dir])",
+    },
+    features = [
+        "default",
+        "fallback",
+    ],
+    rustc_flags = ["@$(location :portable-atomic-1.11.1-build-script-run[rustc_flags])"],
+    visibility = [],
+)
+
+cargo.rust_binary(
+    name = "portable-atomic-1.11.1-build-script-build",
+    srcs = [":portable-atomic-1.11.1.crate"],
+    crate = "build_script_build",
+    crate_root = "portable-atomic-1.11.1.crate/build.rs",
+    edition = "2018",
+    env = {
+        "CARGO_CRATE_NAME": "build_script_build",
+        "CARGO_MANIFEST_DIR": "portable-atomic-1.11.1.crate",
+        "CARGO_PKG_AUTHORS": "",
+        "CARGO_PKG_DESCRIPTION": "Portable atomic types including support for 128-bit atomics, atomic float, etc.\n",
+        "CARGO_PKG_NAME": "portable-atomic",
+        "CARGO_PKG_REPOSITORY": "https://github.com/taiki-e/portable-atomic",
+        "CARGO_PKG_VERSION": "1.11.1",
+        "CARGO_PKG_VERSION_MAJOR": "1",
+        "CARGO_PKG_VERSION_MINOR": "11",
+        "CARGO_PKG_VERSION_PATCH": "1",
+        "CARGO_PKG_VERSION_PRE": "",
+    },
     features = [
         "default",
         "fallback",
     ],
     visibility = [],
+)
+
+buildscript_run(
+    name = "portable-atomic-1.11.1-build-script-run",
+    package_name = "portable-atomic",
+    buildscript_rule = ":portable-atomic-1.11.1-build-script-build",
+    env = {
+        "CARGO_PKG_AUTHORS": "",
+        "CARGO_PKG_DESCRIPTION": "Portable atomic types including support for 128-bit atomics, atomic float, etc.\n",
+        "CARGO_PKG_REPOSITORY": "https://github.com/taiki-e/portable-atomic",
+        "CARGO_PKG_VERSION_MAJOR": "1",
+        "CARGO_PKG_VERSION_MINOR": "11",
+        "CARGO_PKG_VERSION_PATCH": "1",
+        "CARGO_PKG_VERSION_PRE": "",
+    },
+    features = [
+        "default",
+        "fallback",
+    ],
+    version = "1.11.1",
 )
 
 http_archive(
@@ -512,12 +667,40 @@ cargo.rust_library(
     crate = "proc_macro2",
     crate_root = "proc-macro2-1.0.95.crate/src/lib.rs",
     edition = "2021",
+    env = {
+        "OUT_DIR": "$(location :proc-macro2-1.0.95-build-script-run[out_dir])",
+    },
+    features = [
+        "default",
+        "proc-macro",
+    ],
+    rustc_flags = ["@$(location :proc-macro2-1.0.95-build-script-run[rustc_flags])"],
+    visibility = [],
+    deps = [":unicode-ident-1.0.18"],
+)
+
+cargo.rust_binary(
+    name = "proc-macro2-1.0.95-build-script-build",
+    srcs = [":proc-macro2-1.0.95.crate"],
+    crate = "build_script_build",
+    crate_root = "proc-macro2-1.0.95.crate/build.rs",
+    edition = "2021",
     features = [
         "default",
         "proc-macro",
     ],
     visibility = [],
-    deps = [":unicode-ident-1.0.18"],
+)
+
+buildscript_run(
+    name = "proc-macro2-1.0.95-build-script-run",
+    package_name = "proc-macro2",
+    buildscript_rule = ":proc-macro2-1.0.95-build-script-build",
+    features = [
+        "default",
+        "proc-macro",
+    ],
+    version = "1.0.95",
 )
 
 http_archive(
@@ -577,11 +760,31 @@ cargo.rust_library(
     crate = "rayon_core",
     crate_root = "rayon-core-1.12.1.crate/src/lib.rs",
     edition = "2021",
+    env = {
+        "OUT_DIR": "$(location :rayon-core-1.12.1-build-script-run[out_dir])",
+    },
+    rustc_flags = ["@$(location :rayon-core-1.12.1-build-script-run[rustc_flags])"],
     visibility = [],
     deps = [
         ":crossbeam-deque-0.8.6",
         ":crossbeam-utils-0.8.21",
     ],
+)
+
+cargo.rust_binary(
+    name = "rayon-core-1.12.1-build-script-build",
+    srcs = [":rayon-core-1.12.1.crate"],
+    crate = "build_script_build",
+    crate_root = "rayon-core-1.12.1.crate/build.rs",
+    edition = "2021",
+    visibility = [],
+)
+
+buildscript_run(
+    name = "rayon-core-1.12.1-build-script-run",
+    package_name = "rayon-core",
+    buildscript_rule = ":rayon-core-1.12.1-build-script-build",
+    version = "1.12.1",
 )
 
 http_archive(
@@ -636,16 +839,16 @@ cargo.rust_library(
         ":boxcar-0.2.12",
         ":crossbeam-queue-0.3.12",
         ":dashmap-6.1.0",
-        ":hashbrown-0.15.3",
+        ":hashbrown-0.15.4",
         ":hashlink-0.10.0",
         ":indexmap-2.9.0",
         ":parking_lot-0.12.4",
-        ":portable-atomic-1.11.0",
+        ":portable-atomic-1.11.1",
         ":rayon-1.10.0",
         ":rustc-hash-2.1.1",
         ":salsa-macro-rules-0.22.0",
         ":salsa-macros-0.22.0",
-        ":smallvec-1.15.0",
+        ":smallvec-1.15.1",
         ":thin-vec-0.2.14",
         ":tracing-0.1.41",
     ],
@@ -688,7 +891,7 @@ cargo.rust_library(
         ":heck-0.5.0",
         ":proc-macro2-1.0.95",
         ":quote-1.0.40",
-        ":syn-2.0.101",
+        ":syn-2.0.102",
         ":synstructure-0.13.2",
     ],
 )
@@ -711,35 +914,35 @@ cargo.rust_library(
 )
 
 http_archive(
-    name = "smallvec-1.15.0.crate",
-    sha256 = "8917285742e9f3e1683f0a9c4e6b57960b7314d0b08d30d1ecd426713ee2eee9",
-    strip_prefix = "smallvec-1.15.0",
-    urls = ["https://static.crates.io/crates/smallvec/1.15.0/download"],
+    name = "smallvec-1.15.1.crate",
+    sha256 = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03",
+    strip_prefix = "smallvec-1.15.1",
+    urls = ["https://static.crates.io/crates/smallvec/1.15.1/download"],
     visibility = [],
 )
 
 cargo.rust_library(
-    name = "smallvec-1.15.0",
-    srcs = [":smallvec-1.15.0.crate"],
+    name = "smallvec-1.15.1",
+    srcs = [":smallvec-1.15.1.crate"],
     crate = "smallvec",
-    crate_root = "smallvec-1.15.0.crate/src/lib.rs",
+    crate_root = "smallvec-1.15.1.crate/src/lib.rs",
     edition = "2018",
     visibility = [],
 )
 
 http_archive(
-    name = "syn-2.0.101.crate",
-    sha256 = "8ce2b7fc941b3a24138a0a7cf8e858bfc6a992e7978a068a5c760deb0ed43caf",
-    strip_prefix = "syn-2.0.101",
-    urls = ["https://static.crates.io/crates/syn/2.0.101/download"],
+    name = "syn-2.0.102.crate",
+    sha256 = "f6397daf94fa90f058bd0fd88429dd9e5738999cca8d701813c80723add80462",
+    strip_prefix = "syn-2.0.102",
+    urls = ["https://static.crates.io/crates/syn/2.0.102/download"],
     visibility = [],
 )
 
 cargo.rust_library(
-    name = "syn-2.0.101",
-    srcs = [":syn-2.0.101.crate"],
+    name = "syn-2.0.102",
+    srcs = [":syn-2.0.102.crate"],
     crate = "syn",
-    crate_root = "syn-2.0.101.crate/src/lib.rs",
+    crate_root = "syn-2.0.102.crate/src/lib.rs",
     edition = "2021",
     features = [
         "clone-impls",
@@ -783,7 +986,7 @@ cargo.rust_library(
     deps = [
         ":proc-macro2-1.0.95",
         ":quote-1.0.40",
-        ":syn-2.0.101",
+        ":syn-2.0.102",
     ],
 )
 
@@ -826,23 +1029,23 @@ cargo.rust_library(
     visibility = [],
     deps = [
         ":pin-project-lite-0.2.16",
-        ":tracing-core-0.1.33",
+        ":tracing-core-0.1.34",
     ],
 )
 
 http_archive(
-    name = "tracing-core-0.1.33.crate",
-    sha256 = "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c",
-    strip_prefix = "tracing-core-0.1.33",
-    urls = ["https://static.crates.io/crates/tracing-core/0.1.33/download"],
+    name = "tracing-core-0.1.34.crate",
+    sha256 = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678",
+    strip_prefix = "tracing-core-0.1.34",
+    urls = ["https://static.crates.io/crates/tracing-core/0.1.34/download"],
     visibility = [],
 )
 
 cargo.rust_library(
-    name = "tracing-core-0.1.33",
-    srcs = [":tracing-core-0.1.33.crate"],
+    name = "tracing-core-0.1.34",
+    srcs = [":tracing-core-0.1.34.crate"],
     crate = "tracing_core",
-    crate_root = "tracing-core-0.1.33.crate/src/lib.rs",
+    crate_root = "tracing-core-0.1.34.crate/src/lib.rs",
     edition = "2018",
     features = [
         "once_cell",
