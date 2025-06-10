@@ -1,0 +1,18 @@
+load("@prelude//rust:cargo_package.bzl", "cargo")
+
+cargo.rust_binary(
+    name = "rue-lsp",
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/main.rs",
+    edition = "2024",
+    deps = [
+        "//crates/rue-ast:rue-ast",
+        "//crates/rue-compiler:rue-compiler", 
+        "//crates/rue-lexer:rue-lexer",
+        "//crates/rue-parser:rue-parser",
+        "//:tokio",
+        "//:tower-lsp",
+        "//:serde_json",
+    ],
+    visibility = ["PUBLIC"],
+)

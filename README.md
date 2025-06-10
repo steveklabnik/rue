@@ -14,14 +14,15 @@ Rue is an experimental programming language that begins with a very small, simpl
 
 ## Current Status
 
-🚧 **Early Development** - Currently implements:
-- ✅ Complete lexer for basic tokens, keywords, operators
-- ✅ Multi-crate workspace architecture  
-- ✅ Comprehensive CI/CD with both build systems
-- 🔧 Parser (in progress)
-- 🔧 AST definitions (planned)
-- 🔧 Salsa-based incremental compilation (planned)
-- 🔧 x86-64 code generation (planned)
+🎉 **Fully Working Compiler** - Complete implementation:
+- ✅ Complete lexer for all Rue language tokens
+- ✅ Hand-written recursive descent parser with CST
+- ✅ Salsa-based incremental compilation pipeline
+- ✅ Comprehensive semantic analysis with error reporting
+- ✅ x86-64 native code generation with direct ELF output
+- ✅ LSP server for IDE integration
+- ✅ VS Code extension with syntax highlighting and error detection
+- ✅ Multi-crate workspace architecture with dual build systems
 
 ## Language Features (v0.1)
 
@@ -48,20 +49,63 @@ fn main() {
 }
 ```
 
-## Building
+## Building and Running
 
-### With Cargo
+### Compile Rue Programs
 ```bash
-cargo build
-cargo test
-cargo run
+# Build the compiler
+cargo build -p rue
+
+# Compile a rue program to native executable
+cargo run -p rue simple.rue
+
+# Run the compiled program
+./simple
+echo "Exit code: $?"  # Shows the program's return value
 ```
 
 ### With Buck2
 ```bash
 buck2 build //crates/rue:rue
-buck2 run //crates/rue:rue
+buck2 run //crates/rue:rue simple.rue
+./simple
 ```
+
+### Running Tests
+```bash
+# Run all tests
+cargo test
+
+# Test specific components
+cargo test -p rue-lexer
+cargo test -p rue-parser
+cargo test -p rue-semantic
+cargo test -p rue-codegen
+```
+
+## IDE Support
+
+Rue includes a complete Language Server Protocol (LSP) implementation for modern IDE integration:
+
+### VS Code Extension
+```bash
+# Install the VS Code extension
+./install-extension.sh
+
+# Then open any .rue file to get:
+# - Syntax highlighting
+# - Real-time error detection
+# - Auto-completion for brackets/quotes
+```
+
+### Other Editors
+The LSP server works with any LSP-compatible editor:
+```bash
+# Start the language server
+cargo run -p rue-lsp
+```
+
+See `crates/rue-lsp/README.md` for integration details.
 
 ## Development
 

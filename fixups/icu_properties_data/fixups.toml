@@ -1,0 +1,2 @@
+buildscript.run = false
+extra_srcs = ["data/**"]

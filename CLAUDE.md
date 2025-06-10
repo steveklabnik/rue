@@ -22,11 +22,11 @@ For complete language and implementation details, see [spec.md](./spec.md).
 - `buck2 build //crates/...` - Build all crates
 
 ### Testing  
-- `buck2 test //crates/...` - Run all tests
 - `buck2 test //crates/rue-lexer:test` - Run lexer tests
 - `buck2 test //crates/rue-parser:test` - Run parser tests
 - `buck2 test //crates/rue-semantic:test` - Run semantic analysis tests
 - `buck2 test //crates/rue-codegen:test` - Run code generation tests
+- `cargo test -p rue-lsp` - Run LSP server tests (Buck2 has third-party dependency compilation issues)
 
 ### Compiling and Running Programs
 - `buck2 run //crates/rue:rue simple.rue` - Compile simple.rue to executable
@@ -35,7 +35,22 @@ For complete language and implementation details, see [spec.md](./spec.md).
 
 ### Example Programs
 - `simple.rue` - Basic program that returns 42
+- `factorial.rue` - Recursive factorial function (returns 120 for factorial(5))
 - Test compilation: `buck2 run //crates/rue:rue simple.rue && ./simple && echo "Exit code: $?"`
+
+### LSP and IDE Support
+- `cargo run -p rue-lsp` - Start the Language Server Protocol server
+- `./install-extension.sh` - Install VS Code extension for syntax highlighting and error detection
+- The LSP provides real-time syntax error detection in any compatible editor
+- **Note**: LSP currently only works with Cargo due to Buck2 third-party dependency compilation issues
+
+### Managing Third-Party Dependencies
+- `reindeer update` - Update Cargo.lock with new dependencies  
+- `reindeer vendor` - Vendor crates needed for Buck2 build
+- `reindeer buckify` - Generate Buck build rules for third-party Cargo packages
+- When adding new dependencies to any crate, run the above commands to update Buck2 support
+- **Current limitation**: Some third-party dependencies have compilation issues with Buck2 (e.g., serde_json, auto_impl)
+- Use `fixups/<crate>/fixups.toml` to configure build script behavior for problematic dependencies
 
 ### Debugging Compiled Programs
 When compiled programs crash or behave unexpectedly:

@@ -1,76 +1,81 @@
 # Next Steps for Rue Development
 
+## Completed Milestones ✅
+
+### Core Compiler Infrastructure
+- ✅ Complete lexer with all tokens and keywords
+- ✅ Hand-written recursive descent parser with CST
+- ✅ Salsa-based incremental compilation pipeline  
+- ✅ Comprehensive semantic analysis with error reporting
+- ✅ x86-64 native code generation with direct ELF output
+- ✅ End-to-end compilation pipeline (rue source → native executable)
+- ✅ Multi-crate workspace with dual build systems (Cargo + Buck2)
+
+### Developer Experience
+- ✅ LSP server implementation with real-time error detection
+- ✅ VS Code extension with syntax highlighting and diagnostics
+- ✅ Installation scripts and comprehensive documentation
+- ✅ Professional IDE integration comparable to major languages
+
 ## Immediate Priorities (Next Session)
 
-### 1. Complete CI Fixes
-- [ ] Verify all CI checks pass on PR #1
-- [ ] Merge foundational infrastructure PR
+### 1. Language Feature Enhancements
+- [ ] **Multiple function parameters**: `fn add(a, b) { a + b }`
+- [ ] **While loops**: `while condition { body }`
+- [ ] **Local variables beyond let**: Scope and lifetime management
+- [ ] **Better error messages**: Source spans with line/column information
 
-### 2. Parser Implementation
-- [ ] Define AST node types in `rue-ast`
-- [ ] Implement recursive descent parser in `rue-parser`
-- [ ] Parse the factorial example from spec.md
-- [ ] Comprehensive parser tests
+### 2. LSP Server Improvements  
+- [ ] **Line/column diagnostics**: Convert from character offsets
+- [ ] **Semantic diagnostics**: Undefined variables, type mismatches
+- [ ] **Code completion**: Function names, keywords, variables in scope
+- [ ] **Hover information**: Show variable types and function signatures
 
-**Key Design Decisions:**
-- Hand-written recursive descent parser (not parser combinator or generator)
-- IDE-friendly concrete syntax tree that preserves all tokens and whitespace
-- Flat AST with integer indices for efficient incremental updates
-
-### 3. AST Structure Design
-- [ ] Define flat AST storage with separate arrays for different node types
-- [ ] Implement integer-based indices with generational safety
-- [ ] String interning for identifiers
-- [ ] Span tracking for error reporting
-
-**Architecture:**
-```rust
-// Example structure (to be refined)
-struct FlatAst {
-    expressions: Vec<Expression>,
-    statements: Vec<Statement>, 
-    functions: Vec<Function>,
-    strings: StringInterner,
-}
-```
-
-### 4. Salsa Integration
-- [ ] Set up basic Salsa database
-- [ ] Define incremental compilation queries
-- [ ] Implement file parsing as Salsa query
-- [ ] Expression-level change tracking
+### 3. Code Generation Enhancements
+- [ ] **Basic optimizations**: Constant folding, dead code elimination
+- [ ] **Better calling convention**: Multiple parameters, local variables
+- [ ] **Debug information**: DWARF generation for debugger support
+- [ ] **Better error handling**: Improved compilation error messages
 
 ## Medium-term Goals
 
-### 5. Semantic Analysis
-- [ ] Type checking (everything is i64, but still validate)
-- [ ] Name resolution and scope analysis
-- [ ] Function signature validation
-- [ ] Control flow analysis
+### 4. Advanced Language Features
+- [ ] **Structs and data types**: Basic aggregate types
+- [ ] **Arrays and collections**: Fixed-size arrays to start
+- [ ] **String support**: Basic string literals and operations
+- [ ] **Pattern matching**: Simple match expressions
 
-### 6. Code Generation Setup
-- [ ] Design x86-64 code generation interface
-- [ ] Stack-based expression evaluation
-- [ ] Basic function calling convention
-- [ ] ELF executable generation
+### 5. Performance and Tooling
+- [ ] **Optimization passes**: More sophisticated code optimization
+- [ ] **Incremental compilation**: File-level and module-level caching
+- [ ] **Multi-platform targets**: ARM64, WASM support
+- [ ] **Package manager**: Basic dependency management
 
-### 7. End-to-End Integration
-- [ ] CLI argument parsing
-- [ ] File reading and compilation pipeline
-- [ ] Error reporting and diagnostics
-- [ ] Compile and run factorial example
+### 6. Advanced IDE Features
+- [ ] **Go-to-definition**: Navigate to function/variable definitions
+- [ ] **Find references**: Show all uses of a symbol
+- [ ] **Refactoring**: Rename symbol, extract function
+- [ ] **Code formatting**: Automatic code formatting
 
 ## Future Enhancements
 
-- [ ] LSP implementation for IDE support
-- [ ] Debug information generation (DWARF)
-- [ ] More sophisticated error recovery in parser
-- [ ] Multi-platform target support
-- [ ] Advanced optimization passes
+### Language Evolution
+- [ ] **Advanced type system**: Generics, traits, type inference
+- [ ] **Memory management**: Ownership and borrowing concepts
+- [ ] **Macros and metaprogramming**: Code generation facilities
+- [ ] **Async/await**: Asynchronous programming support
+
+### Ecosystem Development  
+- [ ] **Standard library**: Core data structures and algorithms
+- [ ] **Package registry**: Central package repository
+- [ ] **Documentation generator**: Automatic API documentation
+- [ ] **Testing framework**: Built-in unit testing support
 
 ## Testing Strategy
 
-- Unit tests for each compiler phase
-- Integration tests with example rue programs  
-- Performance benchmarks for incremental compilation
-- Cross-platform validation
+- ✅ Unit tests for each compiler phase (lexer, parser, semantic, codegen)
+- ✅ Integration tests with example rue programs
+- [ ] Performance benchmarks for incremental compilation
+- [ ] Cross-platform validation (Linux, macOS, Windows)
+- [ ] LSP integration tests with various editors
+- [ ] Regression test suite for language features
