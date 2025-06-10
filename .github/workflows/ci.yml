@@ -86,7 +86,7 @@ jobs:
       run: buck2 test //crates/...
     
     - name: Buck2 run
-      run: buck2 run //crates/rue:rue simple.rue
+      run: buck2 run //crates/rue:rue samples/simple.rue
 
   # Integration tests
   integration:
@@ -104,7 +104,7 @@ jobs:
     
     - name: Test rue binary
       run: |
-        ./target/release/rue simple.rue || echo "Compilation test complete"
+        ./target/release/rue samples/simple.rue || echo "Compilation test complete"
         echo "Integration tests will be added as features are implemented"
 
   # Security audit

@@ -2,6 +2,8 @@
 
 A programming language that starts as a minimal subset of Rust, designed to explore cutting-edge compiler implementation techniques.
 
+**Platform Support**: Linux x86-64 only
+
 ## About
 
 Rue is an experimental programming language that begins with a very small, simple subset of Rust syntax but focuses on modern compiler architecture:
@@ -10,7 +12,7 @@ Rue is an experimental programming language that begins with a very small, simpl
 - **IDE-first design** with concrete syntax trees that preserve all source information
 - **ECS-inspired flat AST** with integer indices for memory efficiency
 - **Dual build systems** supporting both Cargo and Buck2
-- **x86-64 native code generation** with plans for multi-platform support
+- **x86-64 native code generation** targeting Linux ELF executables
 
 ## Current Status
 
@@ -57,7 +59,7 @@ fn main() {
 cargo build -p rue
 
 # Compile a rue program to native executable
-cargo run -p rue simple.rue
+cargo run -p rue samples/simple.rue
 
 # Run the compiled program
 ./simple
@@ -67,7 +69,7 @@ echo "Exit code: $?"  # Shows the program's return value
 ### With Buck2
 ```bash
 buck2 build //crates/rue:rue
-buck2 run //crates/rue:rue simple.rue
+buck2 run //crates/rue:rue samples/simple.rue
 ./simple
 ```
 
