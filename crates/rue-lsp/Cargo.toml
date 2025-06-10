@@ -1,0 +1,17 @@
+[package]
+name = "rue-lsp"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "rue-lsp"
+path = "src/main.rs"
+
+[dependencies]
+rue-compiler = { path = "../rue-compiler" }
+rue-parser = { path = "../rue-parser" }
+rue-lexer = { path = "../rue-lexer" }
+rue-ast = { path = "../rue-ast" }
+tokio = { version = "1.0", features = ["full"] }
+tower-lsp = "0.20"
+serde_json = "1.0"

@@ -5,8 +5,13 @@ This session focused on implementing Buck2 fixups to resolve build script warnin
 
 ## Problem Statement
 Running `reindeer buckify` generated numerous warnings about missing fixup configurations for crates with build scripts:
+
+**Initial batch (9 crates):**
 - parking_lot_core, lock_api, portable-atomic, rayon-core, libc, crossbeam-utils
 - windows_x86_64_msvc, windows_x86_64_gnu, proc-macro2
+
+**Additional batch after LSP integration (6 crates):**
+- serde, serde_json, icu_normalizer_data, icu_properties_data, slab, httparse
 
 Each warning indicated that the fixup system didn't know whether to run the crate's build script or not.
 
@@ -15,19 +20,29 @@ Each warning indicated that the fixup system didn't know whether to run the crat
    - https://github.com/dtolnay/buck2-rustc-bootstrap/tree/master/fixups (official)
    - https://github.com/gilescope/buck2-fixups/tree/main/fixups (community)
 
-2. **Implement known fixups** - 7 of 9 crates had existing fixup patterns
-3. **Create custom fixups** - 2 crates (portable-atomic, rayon-core) required analysis
+2. **Implement known fixups** - Most crates had existing fixup patterns in one of the repositories
+3. **Create custom fixups** - 2 crates (portable-atomic, rayon-core) required build script analysis
 4. **Special handling** - portable-atomic needed `cargo_env = true` for compile-time environment variables
+5. **Integration workflow** - Session was completed across multiple work sessions as LSP dependencies were added
 
 ## Implementation Details
 
 ### Fixups Created
+**Initial batch (9 crates):**
 - **Run build scripts** (buildscript.run = true):
   - parking_lot_core, lock_api, libc, proc-macro2, portable-atomic, rayon-core
 - **Skip build scripts** (buildscript.run = false):
   - crossbeam-utils, windows_x86_64_msvc, windows_x86_64_gnu
 - **Special config** (cargo_env = true):
   - portable-atomic - needed for env!("CARGO_PKG_NAME") macro
+
+**Additional batch (6 crates):**
+- **Run build scripts** (buildscript.run = true):
+  - serde, serde_json
+- **Skip build scripts** (buildscript.run = false):
+  - slab, httparse
+- **Complex config** (buildscript.run = false + extra_srcs):
+  - icu_normalizer_data, icu_properties_data - include data/** files
 
 ### Key Learning
 **Critical workflow step**: Must run `reindeer buckify` again after creating or modifying fixups to regenerate build files. The fixups don't take effect until this regeneration step.
@@ -39,8 +54,8 @@ Each warning indicated that the fixup system didn't know whether to run the crat
 - Documentation updated with fixup management workflows
 
 ## Files Modified
-- Created `fixups/` directory with 9 subdirectories
-- Added fixups.toml files for each problematic crate
+- Created `fixups/` directory with 15 subdirectories total
+- Added fixups.toml files for each problematic crate (9 initial + 6 additional)
 - Updated CLAUDE.md with reindeer/fixup workflows and reference repositories
 
 ## Impact

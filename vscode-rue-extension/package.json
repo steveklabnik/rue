@@ -1,0 +1,61 @@
+{
+  "name": "rue-language-support",
+  "displayName": "Rue Language Support",
+  "description": "Language support for the Rue programming language",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.50.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:rue"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "rue",
+        "aliases": ["Rue", "rue"],
+        "extensions": [".rue"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "rue",
+        "scopeName": "source.rue",
+        "path": "./syntaxes/rue.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Rue",
+      "properties": {
+        "rue.languageServer.path": {
+          "type": "string",
+          "default": "cargo",
+          "description": "Path to cargo executable (will run 'cargo run -p rue-lsp --bin rue-lsp')"
+        },
+        "rue.languageServer.args": {
+          "type": "array",
+          "default": ["run", "-p", "rue-lsp", "--bin", "rue-lsp"],
+          "description": "Arguments to pass to cargo for running the language server"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.50.0",
+    "@types/node": "14.x",
+    "typescript": "^4.0.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^7.0.0"
+  }
+}
