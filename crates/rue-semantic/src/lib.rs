@@ -133,6 +133,15 @@ fn analyze_statement(scope: &mut Scope, stmt: &StatementNode) -> Result<(), Sema
                 }
             }
         }
+        StatementNode::While(while_stmt) => {
+            // Analyze condition
+            analyze_expression(scope, &while_stmt.condition)?;
+
+            // Analyze body
+            for stmt in &while_stmt.body.statements {
+                analyze_statement(scope, stmt)?;
+            }
+        }
     }
     Ok(())
 }
@@ -331,5 +340,36 @@ fn main() {
 "#,
         );
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_semantic_analysis_while_loop() {
+        let result = parse_and_analyze(
+            r#"
+fn countdown(n) {
+    while n > 0 {
+        n - 1
+    }
+}
+"#,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_semantic_analysis_while_loop_undefined_variable() {
+        let result = parse_and_analyze(
+            r#"
+fn main() {
+    while undefined_var > 0 {
+        42
+    }
+}
+"#,
+        );
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert!(error.message.contains("Undefined variable: undefined_var"));
     }
 }

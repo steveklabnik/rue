@@ -47,6 +47,7 @@ pub enum StatementNode {
     Let(LetStatementNode),
     Expression(ExpressionNode),
     If(Box<IfStatementNode>),
+    While(Box<WhileStatementNode>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -78,6 +79,14 @@ pub struct ElseClauseNode {
 pub enum ElseBodyNode {
     Block(BlockNode),
     If(Box<IfStatementNode>), // for else if
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WhileStatementNode {
+    pub while_token: TokenNode,
+    pub condition: ExpressionNode,
+    pub body: BlockNode,
+    pub trivia: Trivia,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -114,6 +114,9 @@ impl Parser {
         match self.peek().kind {
             TokenKind::Let => Ok(StatementNode::Let(self.parse_let_statement()?)),
             TokenKind::If => Ok(StatementNode::If(Box::new(self.parse_if_statement()?))),
+            TokenKind::While => Ok(StatementNode::While(Box::new(
+                self.parse_while_statement()?,
+            ))),
             _ => Ok(StatementNode::Expression(self.parse_expression()?)),
         }
     }
@@ -181,6 +184,23 @@ impl Parser {
         })
     }
 
+    fn parse_while_statement(&mut self) -> ParseResult<WhileStatementNode> {
+        let leading_trivia = self.consume_trivia();
+        let while_token = self.expect_kind(&TokenKind::While)?;
+        let condition = self.parse_expression()?;
+        let body = self.parse_block()?;
+
+        Ok(WhileStatementNode {
+            while_token,
+            condition,
+            body,
+            trivia: Trivia {
+                leading: leading_trivia,
+                trailing: self.consume_trivia(),
+            },
+        })
+    }
+
     fn parse_expression(&mut self) -> ParseResult<ExpressionNode> {
         self.parse_comparison()
     }
@@ -188,7 +208,13 @@ impl Parser {
     fn parse_comparison(&mut self) -> ParseResult<ExpressionNode> {
         let mut expr = self.parse_addition()?;
 
-        while self.check_kind(&TokenKind::LessEqual) {
+        while self.check_kind(&TokenKind::LessEqual)
+            || self.check_kind(&TokenKind::Less)
+            || self.check_kind(&TokenKind::Greater)
+            || self.check_kind(&TokenKind::GreaterEqual)
+            || self.check_kind(&TokenKind::Equal)
+            || self.check_kind(&TokenKind::NotEqual)
+        {
             let leading_trivia = self.consume_trivia();
             let operator = self.advance();
             let right = self.parse_addition()?;
@@ -589,6 +615,61 @@ fn main() {
                 }
             }
             _ => panic!("Expected main function"),
+        }
+    }
+
+    #[test]
+    fn test_while_statement() {
+        let result = lex_and_parse("while x <= 10 { x }");
+        assert!(result.is_ok());
+        let cst = result.unwrap();
+        assert_eq!(cst.items.len(), 1);
+
+        match &cst.items[0] {
+            CstNode::Statement(stmt) => match &**stmt {
+                StatementNode::While(while_stmt) => {
+                    // Check condition is a binary expression
+                    match &while_stmt.condition {
+                        ExpressionNode::Binary(binary) => {
+                            // Check left operand
+                            match &*binary.left {
+                                ExpressionNode::Identifier(token) => match &token.kind {
+                                    TokenKind::Ident(name) => assert_eq!(name, "x"),
+                                    _ => panic!("Expected identifier token for left operand"),
+                                },
+                                _ => panic!("Expected identifier for left operand"),
+                            }
+
+                            // Check operator
+                            assert_eq!(binary.operator.kind, TokenKind::LessEqual);
+
+                            // Check right operand
+                            match &*binary.right {
+                                ExpressionNode::Literal(token) => match &token.kind {
+                                    TokenKind::Integer(value) => assert_eq!(*value, 10),
+                                    _ => panic!("Expected integer token for right operand"),
+                                },
+                                _ => panic!("Expected literal for right operand"),
+                            }
+                        }
+                        _ => panic!("Expected binary expression for condition"),
+                    }
+
+                    // Check body has one statement
+                    assert_eq!(while_stmt.body.statements.len(), 1);
+                    match &while_stmt.body.statements[0] {
+                        StatementNode::Expression(ExpressionNode::Identifier(token)) => {
+                            match &token.kind {
+                                TokenKind::Ident(name) => assert_eq!(name, "x"),
+                                _ => panic!("Expected identifier token in body"),
+                            }
+                        }
+                        _ => panic!("Expected identifier expression in body"),
+                    }
+                }
+                _ => panic!("Expected while statement"),
+            },
+            _ => panic!("Expected statement"),
         }
     }
 }

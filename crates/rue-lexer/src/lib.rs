@@ -8,6 +8,7 @@ pub enum TokenKind {
     Let,
     If,
     Else,
+    While,
 
     // Identifiers
     Ident(String),
@@ -208,6 +209,7 @@ impl<'a> Lexer<'a> {
             "let" => TokenKind::Let,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
+            "while" => TokenKind::While,
             _ => TokenKind::Ident(text.to_string()),
         };
 
@@ -287,5 +289,14 @@ fn factorial(n) {
         assert_eq!(tokens[0].kind, TokenKind::Fn);
         assert_eq!(tokens[1].kind, TokenKind::Ident("factorial".to_string()));
         assert_eq!(tokens[2].kind, TokenKind::LeftParen);
+    }
+
+    #[test]
+    fn test_while_keyword() {
+        let mut lexer = Lexer::new("while");
+        let tokens = lexer.tokenize();
+
+        assert_eq!(tokens[0].kind, TokenKind::While);
+        assert_eq!(tokens[1].kind, TokenKind::Eof);
     }
 }
