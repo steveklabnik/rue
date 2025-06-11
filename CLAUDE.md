@@ -134,9 +134,12 @@ When adding new dependencies or getting build script warnings from `reindeer buc
 4. Run `reindeer buckify` again to apply fixups
 5. Test with `buck2 test //crates/...`
 
-## Language Specification Maintenance
+## Documentation Maintenance
 
-**CRITICAL**: When implementing new language features or modifying existing language behavior:
+**CRITICAL**: Keep project documentation up to date with implementation changes:
+
+### Language Specification
+When implementing new language features or modifying existing language behavior:
 
 1. **Update the formal specification FIRST** - Modify [docs/spec.md](./docs/spec.md) before implementing
 2. **Specification-driven development** - The language spec is the authoritative definition of Rue
@@ -152,3 +155,12 @@ The formal language specification in `docs/spec.md` is designed to be implementa
 3. Implement the feature in the compiler
 4. Verify implementation matches specification exactly
 5. Add conformance tests that validate spec compliance
+
+### README Maintenance
+When making significant changes to the project:
+
+1. **Update README.md** - Keep the README accurate with current features and capabilities
+2. **Verify technical accuracy** - Test all code examples and commands in the README
+3. **Update build instructions** - Ensure both Cargo and Buck2 examples work correctly
+4. **Language feature updates** - When adding/removing language features, update the feature list
+5. **Sample programs** - Verify example programs still compile and run as described

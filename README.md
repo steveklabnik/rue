@@ -7,41 +7,34 @@
 > anything: I'm just messing around. Feel free to take a look but don't look too
 > much into this just yet. Someday I'll actually talk about this.
 
-
-A programming language that starts as a minimal subset of Rust, designed to explore cutting-edge compiler implementation techniques.
-
-**Platform Support**: Linux x86-64 only
+A programming language that starts as a minimal subset of Rust, designed to
+explore cutting-edge compiler implementation techniques.
 
 ## About
 
-Rue is an experimental programming language that begins with a very small, simple subset of Rust syntax but focuses on modern compiler architecture:
+Rue is an experimental programming language with Rust-like syntax that compiles
+to native code. It focuses on modern compiler architecture including incremental
+compilation using Salsa, IDE-first design with concrete syntax trees, and direct
+ELF executable generation without external tooling.
 
-- **Incremental compilation** using Salsa with expression-level granularity
-- **IDE-first design** with concrete syntax trees that preserve all source information
-- **ECS-inspired flat AST** with integer indices for memory efficiency
-- **Dual build systems** supporting both Cargo and Buck2
-- **x86-64 native code generation** targeting Linux ELF executables
+The compiler supports both Cargo and Buck2 build systems.
 
 ## Current Status
 
-🎉 **Fully Working Compiler** - Complete implementation:
-- ✅ Complete lexer for all Rue language tokens
-- ✅ Hand-written recursive descent parser with CST
-- ✅ Salsa-based incremental compilation pipeline
-- ✅ Comprehensive semantic analysis with error reporting
-- ✅ x86-64 native code generation with direct ELF output
-- ✅ LSP server for IDE integration
-- ✅ VS Code extension with syntax highlighting and error detection
-- ✅ Multi-crate workspace architecture with dual build systems
+The compiler is fully functional with a complete implementation pipeline from
+lexing through native code generation. It includes an LSP server for IDE
+integration and VS Code extension.
 
-## Language Features (v0.1)
+**Platform Support**: Linux x86-64 only
 
-The initial version supports a minimal subset:
-- **Variables**: All variables are 64-bit integers
-- **Arithmetic**: Basic operations (+, -, *, /, %)
-- **Control Flow**: if/else statements
-- **Functions**: Single parameter, single return value
-- **No explicit types**: Everything is implicitly i64
+## Language Features
+
+Current language support:
+- Variables and assignment (let statements)
+- Arithmetic operations (+, -, *, /, %)
+- Control flow (if/else, while loops)
+- Functions with optional parameters
+- All values are 64-bit signed integers
 
 ### Example Program
 
@@ -61,77 +54,69 @@ fn main() {
 
 ## Building and Running
 
-### Compile Rue Programs
-```bash
-# Build the compiler
-cargo build -p rue
+### Compile Rue programs
 
-# Compile a rue program to native executable
+```bash
+# Compile a program to executable
 cargo run -p rue samples/simple.rue
 
-# Run the compiled program
-./simple
-echo "Exit code: $?"  # Shows the program's return value
+# Run the compiled program (executable created in same directory as source)
+./samples/simple; echo $?  # Shows the program's return value
 ```
 
 ### With Buck2
+
 ```bash
-buck2 build //crates/rue:rue
 buck2 run //crates/rue:rue samples/simple.rue
-./simple
+./samples/simple; echo $?
 ```
 
 ### Running Tests
-```bash
-# Run all tests
-cargo test
 
-# Test specific components
-cargo test -p rue-lexer
-cargo test -p rue-parser
-cargo test -p rue-semantic
-cargo test -p rue-codegen
+```bash
+# With Cargo
+cargo test                    # All tests
+cargo test -p rue-lexer       # Just lexer tests
+cargo test -p rue-parser      # Just parser tests
+
+# With Buck2
+buck2 test //crates/...       # All tests
+buck2 test //crates/rue-lexer:test    # Just lexer tests
+buck2 test //crates/rue-parser:test   # Just parser tests
 ```
 
 ## IDE Support
 
-Rue includes a complete Language Server Protocol (LSP) implementation for modern IDE integration:
+The language server provides syntax highlighting and error detection:
 
-### VS Code Extension
 ```bash
-# Install the VS Code extension
+# Install VS Code extension
 ./install-extension.sh
 
-# Then open any .rue file to get:
-# - Syntax highlighting
-# - Real-time error detection
-# - Auto-completion for brackets/quotes
+# Start the language server for other editors
+cargo run -p rue-lsp          # With Cargo
+buck2 run //crates/rue-lsp    # With Buck2
 ```
 
-### Other Editors
-The LSP server works with any LSP-compatible editor:
-```bash
-# Start the language server
-cargo run -p rue-lsp
-```
-
-See `crates/rue-lsp/README.md` for integration details.
+See `crates/rue-lsp/README.md` for editor integration details.
 
 ## Development
 
-- **Architecture**: See [spec.md](./spec.md) for complete language and implementation details
-- **IDE Support**: See [CLAUDE.md](./CLAUDE.md) for development guidance
-- **Version Control**: This project uses jj (Jujutsu) instead of git
+See [docs/spec.md](./docs/spec.md) for the complete language specification and
+[CLAUDE.md](./CLAUDE.md) for development guidance.
 
 ## License
 
 Licensed under either of
 
- * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+* Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+  http://www.apache.org/licenses/LICENSE-2.0) MIT license
+* ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
 
 ### Contribution
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
