@@ -190,14 +190,16 @@ impl Codegen {
             }
         }
 
-        // Generate function body
-        let mut return_value = None;
+        // Generate function body statements
         for stmt in &func.body.statements {
-            return_value = self.generate_statement(stmt, scope)?;
+            self.generate_statement(stmt, scope)?;
         }
 
-        // Ensure return value is in rax
-        if return_value.is_none() {
+        // Generate final expression (return value)
+        if let Some(final_expr) = &func.body.final_expr {
+            self.generate_expression(final_expr, scope)?;
+        } else {
+            // No final expression, return 0
             self.emit(Instruction::Mov(
                 Operand::Register(Register::Rax),
                 Operand::Immediate(0),
@@ -226,8 +228,8 @@ impl Codegen {
         scope: &Scope,
     ) -> Result<Option<()>, CodegenError> {
         match stmt {
-            StatementNode::Expression(expr) => {
-                self.generate_expression(expr, scope)?;
+            StatementNode::Expression(expr_stmt) => {
+                self.generate_expression(&expr_stmt.expression, scope)?;
                 // Expression result is now in rax (return value)
                 Ok(Some(()))
             }
@@ -264,84 +266,6 @@ impl Codegen {
                     }
                 }
                 Ok(None)
-            }
-            StatementNode::If(if_stmt) => {
-                let else_label = self.next_label("else");
-                let end_label = self.next_label("end_if");
-
-                // Generate condition
-                self.generate_expression(&if_stmt.condition, scope)?;
-
-                // Compare with 0 (false)
-                self.emit(Instruction::Cmp(
-                    Operand::Register(Register::Rax),
-                    Operand::Immediate(0),
-                ));
-                self.emit(Instruction::Je(else_label.clone()));
-
-                // Generate then block
-                let mut then_return = None;
-                for stmt in &if_stmt.then_block.statements {
-                    then_return = self.generate_statement(stmt, scope)?;
-                }
-
-                self.emit(Instruction::Jmp(end_label.clone()));
-
-                // Generate else block if it exists
-                self.emit(Instruction::Label(else_label));
-                let mut else_return = None;
-                if let Some(else_clause) = &if_stmt.else_clause {
-                    match &else_clause.body {
-                        rue_ast::ElseBodyNode::Block(block) => {
-                            for stmt in &block.statements {
-                                else_return = self.generate_statement(stmt, scope)?;
-                            }
-                        }
-                        rue_ast::ElseBodyNode::If(nested_if) => {
-                            else_return = self
-                                .generate_statement(&StatementNode::If(nested_if.clone()), scope)?;
-                        }
-                    }
-                }
-
-                self.emit(Instruction::Label(end_label));
-
-                // If both branches return values, this is an expression
-                if then_return.is_some() && else_return.is_some() {
-                    Ok(Some(()))
-                } else {
-                    Ok(None)
-                }
-            }
-            StatementNode::While(while_stmt) => {
-                let loop_start = self.next_label("loop_start");
-                let loop_end = self.next_label("loop_end");
-
-                // Loop start label
-                self.emit(Instruction::Label(loop_start.clone()));
-
-                // Generate condition
-                self.generate_expression(&while_stmt.condition, scope)?;
-
-                // Compare with 0 (false) and jump to end if condition is false
-                self.emit(Instruction::Cmp(
-                    Operand::Register(Register::Rax),
-                    Operand::Immediate(0),
-                ));
-                self.emit(Instruction::Je(loop_end.clone()));
-
-                // Generate loop body
-                for stmt in &while_stmt.body.statements {
-                    self.generate_statement(stmt, scope)?;
-                }
-
-                // Jump back to condition check
-                self.emit(Instruction::Jmp(loop_start));
-
-                // Loop end label
-                self.emit(Instruction::Label(loop_end));
-
-                Ok(None) // While loops don't return values
             }
         }
     }
@@ -499,6 +423,114 @@ impl Codegen {
                         self.emit(Instruction::Call(func_name.clone()));
                     }
                 }
+
+                Ok(())
+            }
+            ExpressionNode::If(if_stmt) => {
+                let else_label = self.next_label("else");
+                let end_label = self.next_label("end_if");
+
+                // Generate condition
+                self.generate_expression(&if_stmt.condition, _scope)?;
+
+                // Compare with 0 (false)
+                self.emit(Instruction::Cmp(
+                    Operand::Register(Register::Rax),
+                    Operand::Immediate(0),
+                ));
+                self.emit(Instruction::Je(else_label.clone()));
+
+                // Generate then block statements
+                for stmt in &if_stmt.then_block.statements {
+                    self.generate_statement(stmt, _scope)?;
+                }
+                // Generate then block final expression
+                if let Some(final_expr) = &if_stmt.then_block.final_expr {
+                    self.generate_expression(final_expr, _scope)?;
+                } else {
+                    // No final expression, return 0
+                    self.emit(Instruction::Mov(
+                        Operand::Register(Register::Rax),
+                        Operand::Immediate(0),
+                    ));
+                }
+
+                self.emit(Instruction::Jmp(end_label.clone()));
+
+                // Generate else block if it exists
+                self.emit(Instruction::Label(else_label));
+                if let Some(else_clause) = &if_stmt.else_clause {
+                    match &else_clause.body {
+                        rue_ast::ElseBodyNode::Block(block) => {
+                            for stmt in &block.statements {
+                                self.generate_statement(stmt, _scope)?;
+                            }
+                            if let Some(final_expr) = &block.final_expr {
+                                self.generate_expression(final_expr, _scope)?;
+                            } else {
+                                // No final expression, return 0
+                                self.emit(Instruction::Mov(
+                                    Operand::Register(Register::Rax),
+                                    Operand::Immediate(0),
+                                ));
+                            }
+                        }
+                        rue_ast::ElseBodyNode::If(nested_if) => {
+                            self.generate_expression(
+                                &ExpressionNode::If(nested_if.clone()),
+                                _scope,
+                            )?;
+                        }
+                    }
+                } else {
+                    // No else clause, return 0
+                    self.emit(Instruction::Mov(
+                        Operand::Register(Register::Rax),
+                        Operand::Immediate(0),
+                    ));
+                }
+
+                self.emit(Instruction::Label(end_label));
+
+                Ok(())
+            }
+            ExpressionNode::While(while_stmt) => {
+                let loop_start = self.next_label("loop_start");
+                let loop_end = self.next_label("loop_end");
+
+                // Loop start label
+                self.emit(Instruction::Label(loop_start.clone()));
+
+                // Generate condition
+                self.generate_expression(&while_stmt.condition, _scope)?;
+
+                // Compare with 0 (false) and jump to end if condition is false
+                self.emit(Instruction::Cmp(
+                    Operand::Register(Register::Rax),
+                    Operand::Immediate(0),
+                ));
+                self.emit(Instruction::Je(loop_end.clone()));
+
+                // Generate loop body statements
+                for stmt in &while_stmt.body.statements {
+                    self.generate_statement(stmt, _scope)?;
+                }
+                // Generate loop body final expression (if any) - value is discarded
+                if let Some(final_expr) = &while_stmt.body.final_expr {
+                    self.generate_expression(final_expr, _scope)?;
+                }
+
+                // Jump back to condition check
+                self.emit(Instruction::Jmp(loop_start));
+
+                // Loop end label
+                self.emit(Instruction::Label(loop_end));
+
+                // While expressions always return 0
+                self.emit(Instruction::Mov(
+                    Operand::Register(Register::Rax),
+                    Operand::Immediate(0),
+                ));
 
                 Ok(())
             }
@@ -1130,8 +1162,8 @@ fn main() {
         let instructions = compile_program(
             r#"
 fn main() {
-    let x = 42
-    x = 100
+    let x = 42;
+    x = 100;
     x
 }
 "#,

@@ -1,7 +1,7 @@
 fn simple_while(x) {
     while x <= 3 {
         5
-    }
+    };
     42
 }
 

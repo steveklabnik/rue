@@ -1,5 +1,5 @@
 fn main() {
-    let x = 42
-    x = 100
+    let x = 42;
+    x = 100;
     x
 }

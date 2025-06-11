@@ -65,14 +65,14 @@ mod tests {
         let mut db = RueDatabase::default();
 
         // Create a source file
-        let file = SourceFile::new(&db, "test.rue".to_string(), "42".to_string());
+        let file = SourceFile::new(&db, "test.rue".to_string(), "fn main() { 42 }".to_string());
 
         // Parse it
         let result = parse_file(&db, file);
         assert!(result.is_ok());
 
         // Modify the file
-        file.set_text(&mut db).to("2 + 3".to_string());
+        file.set_text(&mut db).to("fn main() { 2 + 3 }".to_string());
 
         // Parse again (Salsa will recompute)
         let result = parse_file(&db, file);
@@ -241,7 +241,7 @@ fn main() {
             "test.rue".to_string(),
             r#"
 fn main() {
-    let x = 42
+    let x = 42;
     x + 1
 }
 "#
@@ -316,8 +316,8 @@ fn main() {
             "assignment.rue".to_string(),
             r#"
 fn main() {
-    let x = 42
-    x = 100
+    let x = 42;
+    x = 100;
     x
 }
 "#

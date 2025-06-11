@@ -153,7 +153,7 @@ mod tests {
 fn test_while(n) {
     while n > 0 {
         n + 1
-    }
+    };
     42
 }
 
@@ -193,8 +193,8 @@ fn test_invalid() {
     fn test_assignment_parsing() {
         let text = r#"
 fn test_assignment() {
-    let x = 42
-    x = 100
+    let x = 42;
+    x = 100;
     x
 }
 

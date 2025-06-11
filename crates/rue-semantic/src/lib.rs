@@ -88,9 +88,14 @@ fn analyze_function(scope: &mut Scope, func: &FunctionNode) -> Result<(), Semant
         }
     }
 
-    // Analyze function body
+    // Analyze function body statements
     for stmt in &func.body.statements {
         analyze_statement(&mut local_scope, stmt)?;
+    }
+
+    // Analyze final expression if it exists
+    if let Some(final_expr) = &func.body.final_expr {
+        analyze_expression(&mut local_scope, final_expr)?;
     }
 
     Ok(())
@@ -122,46 +127,14 @@ fn analyze_statement(scope: &mut Scope, stmt: &StatementNode) -> Result<(), Sema
                 // Variable already exists, assignment is valid
             }
         }
-        StatementNode::Expression(expr) => {
-            analyze_expression(scope, expr)?;
-        }
-        StatementNode::If(if_stmt) => {
-            // Analyze condition
-            analyze_expression(scope, &if_stmt.condition)?;
-
-            // Analyze then block
-            for stmt in &if_stmt.then_block.statements {
-                analyze_statement(scope, stmt)?;
-            }
-
-            // Analyze else block if it exists
-            if let Some(else_clause) = &if_stmt.else_clause {
-                match &else_clause.body {
-                    rue_ast::ElseBodyNode::Block(block) => {
-                        for stmt in &block.statements {
-                            analyze_statement(scope, stmt)?;
-                        }
-                    }
-                    rue_ast::ElseBodyNode::If(nested_if) => {
-                        analyze_statement(scope, &StatementNode::If(nested_if.clone()))?;
-                    }
-                }
-            }
-        }
-        StatementNode::While(while_stmt) => {
-            // Analyze condition
-            analyze_expression(scope, &while_stmt.condition)?;
-
-            // Analyze body
-            for stmt in &while_stmt.body.statements {
-                analyze_statement(scope, stmt)?;
-            }
+        StatementNode::Expression(expr_stmt) => {
+            analyze_expression(scope, &expr_stmt.expression)?;
         }
     }
     Ok(())
 }
 
-fn analyze_expression(scope: &Scope, expr: &ExpressionNode) -> Result<RueType, SemanticError> {
+fn analyze_expression(scope: &mut Scope, expr: &ExpressionNode) -> Result<RueType, SemanticError> {
     match expr {
         ExpressionNode::Literal(_) => Ok(RueType::I64), // All literals are i64
         ExpressionNode::Identifier(token) => {
@@ -201,7 +174,7 @@ fn analyze_expression(scope: &Scope, expr: &ExpressionNode) -> Result<RueType, S
             if let ExpressionNode::Identifier(func_token) = &*call_expr.function {
                 if let rue_lexer::TokenKind::Ident(func_name) = &func_token.kind {
                     // Check if function exists
-                    if let Some(signature) = scope.functions.get(func_name) {
+                    if let Some(signature) = scope.functions.get(func_name).cloned() {
                         // Check argument count
                         if call_expr.args.len() != signature.param_count {
                             return Err(SemanticError {
@@ -220,7 +193,7 @@ fn analyze_expression(scope: &Scope, expr: &ExpressionNode) -> Result<RueType, S
                             analyze_expression(scope, arg)?;
                         }
 
-                        Ok(signature.return_type.clone())
+                        Ok(signature.return_type)
                     } else {
                         Err(SemanticError {
                             message: format!("Undefined function: {}", func_name),
@@ -239,6 +212,66 @@ fn analyze_expression(scope: &Scope, expr: &ExpressionNode) -> Result<RueType, S
                     span: call_expr.open_paren.span,
                 })
             }
+        }
+        ExpressionNode::If(if_stmt) => {
+            // Analyze condition
+            analyze_expression(scope, &if_stmt.condition)?;
+
+            // Analyze then block
+            for stmt in &if_stmt.then_block.statements {
+                analyze_statement(scope, stmt)?;
+            }
+            let then_type = if let Some(final_expr) = &if_stmt.then_block.final_expr {
+                analyze_expression(scope, final_expr)?
+            } else {
+                RueType::I64 // blocks without final expression return i64(0)
+            };
+
+            // Analyze else block if it exists
+            let else_type = if let Some(else_clause) = &if_stmt.else_clause {
+                match &else_clause.body {
+                    rue_ast::ElseBodyNode::Block(block) => {
+                        for stmt in &block.statements {
+                            analyze_statement(scope, stmt)?;
+                        }
+                        if let Some(final_expr) = &block.final_expr {
+                            analyze_expression(scope, final_expr)?
+                        } else {
+                            RueType::I64
+                        }
+                    }
+                    rue_ast::ElseBodyNode::If(nested_if) => {
+                        analyze_expression(scope, &ExpressionNode::If(nested_if.clone()))?
+                    }
+                }
+            } else {
+                RueType::I64 // missing else defaults to i64(0)
+            };
+
+            // Both branches must have same type
+            if then_type == else_type {
+                Ok(then_type)
+            } else {
+                Err(SemanticError {
+                    message: "If expression branches must have the same type".to_string(),
+                    span: if_stmt.if_token.span,
+                })
+            }
+        }
+        ExpressionNode::While(while_stmt) => {
+            // Analyze condition
+            analyze_expression(scope, &while_stmt.condition)?;
+
+            // Analyze body
+            for stmt in &while_stmt.body.statements {
+                analyze_statement(scope, stmt)?;
+            }
+            if let Some(final_expr) = &while_stmt.body.final_expr {
+                analyze_expression(scope, final_expr)?;
+            }
+
+            // While expressions always return i64(0)
+            Ok(RueType::I64)
         }
     }
 }
@@ -349,7 +382,7 @@ fn main() {
         let result = parse_and_analyze(
             r#"
 fn main() {
-    let x = 42
+    let x = 42;
     x + 1
 }
 "#,
@@ -393,8 +426,8 @@ fn main() {
         let result = parse_and_analyze(
             r#"
 fn main() {
-    let x = 42
-    x = 100
+    let x = 42;
+    x = 100;
     x
 }
 "#,
@@ -407,7 +440,7 @@ fn main() {
         let result = parse_and_analyze(
             r#"
 fn main() {
-    undefined_var = 42
+    undefined_var = 42;
 }
 "#,
         );
@@ -426,9 +459,9 @@ fn main() {
         let result = parse_and_analyze(
             r#"
 fn main() {
-    let x = 10
-    let y = 20
-    x = y + 5
+    let x = 10;
+    let y = 20;
+    x = y + 5;
     x
 }
 "#,
