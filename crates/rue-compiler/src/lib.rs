@@ -306,6 +306,36 @@ fn main() {
         assert_eq!(&executable[0..4], &[0x7f, 0x45, 0x4c, 0x46]);
         assert!(executable.len() > 200); // Should be reasonable size
     }
+
+    #[test]
+    fn test_compile_assignment() {
+        let db = RueDatabase::default();
+
+        let file = SourceFile::new(
+            &db,
+            "assignment.rue".to_string(),
+            r#"
+fn main() {
+    let x = 42
+    x = 100
+    x
+}
+"#
+            .to_string(),
+        );
+
+        let result = compile_file(&db, file);
+        if let Err(ref e) = result {
+            println!("Compilation error: {}", e.message);
+        }
+        assert!(result.is_ok());
+
+        let executable = result.unwrap();
+        // Should be a valid ELF executable
+        assert_eq!(&executable[0..4], &[0x7f, 0x45, 0x4c, 0x46]);
+        println!("Executable length: {}", executable.len());
+        assert!(executable.len() > 100); // Should be reasonable size
+    }
 }
 
 // Simplified compilation error for Salsa

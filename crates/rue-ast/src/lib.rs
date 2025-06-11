@@ -45,6 +45,7 @@ pub struct BlockNode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum StatementNode {
     Let(LetStatementNode),
+    Assign(AssignStatementNode),
     Expression(ExpressionNode),
     If(Box<IfStatementNode>),
     While(Box<WhileStatementNode>),
@@ -53,6 +54,14 @@ pub enum StatementNode {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetStatementNode {
     pub let_token: TokenNode,
+    pub name: TokenNode,
+    pub equals: TokenNode,
+    pub value: ExpressionNode,
+    pub trivia: Trivia,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssignStatementNode {
     pub name: TokenNode,
     pub equals: TokenNode,
     pub value: ExpressionNode,

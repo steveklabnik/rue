@@ -246,6 +246,25 @@ impl Codegen {
                 }
                 Ok(None)
             }
+            StatementNode::Assign(assign_stmt) => {
+                // Generate the value expression
+                self.generate_expression(&assign_stmt.value, scope)?;
+
+                // Store in existing variable
+                if let rue_lexer::TokenKind::Ident(var_name) = &assign_stmt.name.kind {
+                    if let Some(&offset) = self.variables.get(var_name) {
+                        self.emit(Instruction::Mov(
+                            Operand::Memory(format!("rbp{:+}", offset)),
+                            Operand::Register(Register::Rax),
+                        ));
+                    } else {
+                        return Err(CodegenError {
+                            message: format!("Undefined variable in assignment: {}", var_name),
+                        });
+                    }
+                }
+                Ok(None)
+            }
             StatementNode::If(if_stmt) => {
                 let else_label = self.next_label("else");
                 let end_label = self.next_label("end_if");
@@ -1104,5 +1123,27 @@ fn main() {
         // Should produce a valid ELF executable
         assert_eq!(&elf[0..4], &[0x7f, 0x45, 0x4c, 0x46]); // ELF magic
         assert!(elf.len() > 200); // Should be reasonable size
+    }
+
+    #[test]
+    fn test_assignment_compilation() {
+        let instructions = compile_program(
+            r#"
+fn main() {
+    let x = 42
+    x = 100
+    x
+}
+"#,
+        );
+        assert!(instructions.is_ok());
+        let instrs = instructions.unwrap();
+
+        // Should contain multiple mov operations (for let and assignment)
+        let mov_count = instrs
+            .iter()
+            .filter(|i| matches!(i, Instruction::Mov(_, _)))
+            .count();
+        assert!(mov_count >= 3); // At least initial value, assignment, and return loading
     }
 }

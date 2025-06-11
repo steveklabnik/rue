@@ -107,6 +107,21 @@ fn analyze_statement(scope: &mut Scope, stmt: &StatementNode) -> Result<(), Sema
                 scope.variables.insert(var_name.clone(), RueType::I64);
             }
         }
+        StatementNode::Assign(assign_stmt) => {
+            // Analyze the value expression
+            analyze_expression(scope, &assign_stmt.value)?;
+
+            // Check that variable exists in scope
+            if let rue_lexer::TokenKind::Ident(var_name) = &assign_stmt.name.kind {
+                if !scope.variables.contains_key(var_name) {
+                    return Err(SemanticError {
+                        message: format!("Cannot assign to undefined variable: {}", var_name),
+                        span: assign_stmt.name.span,
+                    });
+                }
+                // Variable already exists, assignment is valid
+            }
+        }
         StatementNode::Expression(expr) => {
             analyze_expression(scope, expr)?;
         }
@@ -371,5 +386,53 @@ fn main() {
 
         let error = result.unwrap_err();
         assert!(error.message.contains("Undefined variable: undefined_var"));
+    }
+
+    #[test]
+    fn test_semantic_analysis_assignment_valid() {
+        let result = parse_and_analyze(
+            r#"
+fn main() {
+    let x = 42
+    x = 100
+    x
+}
+"#,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_semantic_analysis_assignment_undefined_variable() {
+        let result = parse_and_analyze(
+            r#"
+fn main() {
+    undefined_var = 42
+}
+"#,
+        );
+        assert!(result.is_err());
+
+        let error = result.unwrap_err();
+        assert!(
+            error
+                .message
+                .contains("Cannot assign to undefined variable: undefined_var")
+        );
+    }
+
+    #[test]
+    fn test_semantic_analysis_assignment_with_expression() {
+        let result = parse_and_analyze(
+            r#"
+fn main() {
+    let x = 10
+    let y = 20
+    x = y + 5
+    x
+}
+"#,
+        );
+        assert!(result.is_ok());
     }
 }

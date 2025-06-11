@@ -1,0 +1,26 @@
+fn test_basic_assignment() {
+    let x = 10
+    x = 20
+    x
+}
+
+fn test_assignment_with_expression() {
+    let a = 5
+    let b = 3
+    a = a + b * 2
+    a
+}
+
+fn test_assignment_in_while() {
+    let counter = 0
+    let sum = 0
+    while counter <= 3 {
+        sum = sum + counter
+        counter = counter + 1
+    }
+    sum
+}
+
+fn main() {
+    test_assignment_in_while()
+}
