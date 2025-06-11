@@ -1,7 +1,7 @@
 fn test_while_false(x) {
     while x > 100 {
         42
-    }
+    };
     10
 }
 
@@ -9,12 +9,12 @@ fn test_while_nested(a) {
     if a > 5 {
         while a <= 3 {
             a + 1
-        }
+        };
         20
     } else {
         while a > 10 {
             a - 1
-        }
+        };
         30
     }
 }

@@ -19,11 +19,16 @@
 
 ## Immediate Priorities (Next Session)
 
-### 1. Language Feature Enhancements
+### 1. Language Feature Completion
+- [ ] **Complete missing comparison operators in codegen**: `<`, `>=`, `==`, `!=`
+- [ ] **Fix division operation bugs in codegen**: Register swap errors
+- [ ] **Add modulo (%) operation support in codegen**: Currently parsed but not generated
 - [ ] **Multiple function parameters**: `fn add(a, b) { a + b }`
-- [ ] **While loops**: `while condition { body }`
-- [ ] **Local variables beyond let**: Scope and lifetime management
 - [ ] **Better error messages**: Source spans with line/column information
+
+### 2. Language Specification Fixes
+- [ ] **Fix semicolon inconsistency in spec**: Update while loop example to match grammar
+- [ ] **Add comprehensive integration tests**: For if/while expressions in various contexts
 
 ### 2. LSP Server Improvements  
 - [ ] **Line/column diagnostics**: Convert from character offsets

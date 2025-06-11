@@ -93,8 +93,33 @@ impl Parser {
         let open_brace = self.expect_kind(&TokenKind::LeftBrace)?;
 
         let mut statements = Vec::new();
+        let mut final_expr = None;
+
         while !self.check_kind(&TokenKind::RightBrace) && !self.is_at_end() {
-            statements.push(self.parse_statement()?);
+            // Try to parse as statement first
+            if self.is_statement_start() {
+                statements.push(self.parse_statement()?);
+            } else {
+                // Parse as potential final expression
+                let expr = self.parse_expression()?;
+
+                // If followed by semicolon, it's an expression statement
+                if self.check_kind(&TokenKind::Semicolon) {
+                    let semicolon = self.advance();
+                    statements.push(StatementNode::Expression(ExpressionStatementNode {
+                        expression: expr,
+                        semicolon,
+                        trivia: Trivia {
+                            leading: vec![],
+                            trailing: self.consume_trivia(),
+                        },
+                    }));
+                } else {
+                    // No semicolon - this is the final expression
+                    final_expr = Some(expr);
+                    break;
+                }
+            }
         }
 
         let close_brace = self.expect_kind(&TokenKind::RightBrace)?;
@@ -102,6 +127,7 @@ impl Parser {
         Ok(BlockNode {
             open_brace,
             statements,
+            final_expr,
             close_brace,
             trivia: Trivia {
                 leading: leading_trivia,
@@ -110,13 +136,24 @@ impl Parser {
         })
     }
 
+    fn is_statement_start(&self) -> bool {
+        match self.peek().kind {
+            TokenKind::Let => true,
+            TokenKind::Ident(_) => {
+                // Check if this is an assignment statement (identifier = expression)
+                if self.current + 1 < self.tokens.len() {
+                    matches!(self.tokens[self.current + 1].kind, TokenKind::Assign)
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+
     fn parse_statement(&mut self) -> ParseResult<StatementNode> {
         match self.peek().kind {
             TokenKind::Let => Ok(StatementNode::Let(self.parse_let_statement()?)),
-            TokenKind::If => Ok(StatementNode::If(Box::new(self.parse_if_statement()?))),
-            TokenKind::While => Ok(StatementNode::While(Box::new(
-                self.parse_while_statement()?,
-            ))),
             TokenKind::Ident(_) => {
                 // Look ahead to see if this is an assignment (identifier = expression)
                 if self.current + 1 < self.tokens.len() {
@@ -124,13 +161,40 @@ impl Parser {
                         TokenKind::Assign => {
                             Ok(StatementNode::Assign(self.parse_assign_statement()?))
                         }
-                        _ => Ok(StatementNode::Expression(self.parse_expression()?)),
+                        _ => {
+                            // This is an expression statement - parse expression + semicolon
+                            let expr = self.parse_expression()?;
+                            let semicolon = self.expect_kind(&TokenKind::Semicolon)?;
+                            Ok(StatementNode::Expression(ExpressionStatementNode {
+                                expression: expr,
+                                semicolon,
+                                trivia: Trivia {
+                                    leading: vec![],
+                                    trailing: self.consume_trivia(),
+                                },
+                            }))
+                        }
                     }
                 } else {
-                    Ok(StatementNode::Expression(self.parse_expression()?))
+                    Err(ParseError {
+                        message: "Unexpected end of input".to_string(),
+                        span: self.peek().span,
+                    })
                 }
             }
-            _ => Ok(StatementNode::Expression(self.parse_expression()?)),
+            _ => {
+                // Expression statement
+                let expr = self.parse_expression()?;
+                let semicolon = self.expect_kind(&TokenKind::Semicolon)?;
+                Ok(StatementNode::Expression(ExpressionStatementNode {
+                    expression: expr,
+                    semicolon,
+                    trivia: Trivia {
+                        leading: vec![],
+                        trailing: self.consume_trivia(),
+                    },
+                }))
+            }
         }
     }
 
@@ -140,12 +204,14 @@ impl Parser {
         let name = self.expect_ident()?;
         let equals = self.expect_kind(&TokenKind::Assign)?;
         let value = self.parse_expression()?;
+        let semicolon = self.expect_kind(&TokenKind::Semicolon)?;
 
         Ok(LetStatementNode {
             let_token,
             name,
             equals,
             value,
+            semicolon,
             trivia: Trivia {
                 leading: leading_trivia,
                 trailing: self.consume_trivia(),
@@ -158,11 +224,13 @@ impl Parser {
         let name = self.expect_ident()?;
         let equals = self.expect_kind(&TokenKind::Assign)?;
         let value = self.parse_expression()?;
+        let semicolon = self.expect_kind(&TokenKind::Semicolon)?;
 
         Ok(AssignStatementNode {
             name,
             equals,
             value,
+            semicolon,
             trivia: Trivia {
                 leading: leading_trivia,
                 trailing: self.consume_trivia(),
@@ -201,7 +269,7 @@ impl Parser {
         let body = if self.check_kind(&TokenKind::If) {
             ElseBodyNode::If(Box::new(self.parse_if_statement()?))
         } else {
-            ElseBodyNode::Block(self.parse_block()?)
+            ElseBodyNode::Block(Box::new(self.parse_block()?))
         };
 
         Ok(ElseClauseNode {
@@ -341,6 +409,10 @@ impl Parser {
         match &self.peek().kind {
             TokenKind::Integer(_) => Ok(ExpressionNode::Literal(self.advance())),
             TokenKind::Ident(_) => Ok(ExpressionNode::Identifier(self.advance())),
+            TokenKind::If => Ok(ExpressionNode::If(Box::new(self.parse_if_statement()?))),
+            TokenKind::While => Ok(ExpressionNode::While(Box::new(
+                self.parse_while_statement()?,
+            ))),
             TokenKind::LeftParen => {
                 self.advance(); // consume '('
                 let expr = self.parse_expression()?;
@@ -422,16 +494,19 @@ mod tests {
 
     #[test]
     fn test_simple_number() {
-        let result = lex_and_parse("42");
+        let result = lex_and_parse("42;");
         assert!(result.is_ok());
         let cst = result.unwrap();
         assert_eq!(cst.items.len(), 1);
 
         match &cst.items[0] {
             CstNode::Statement(stmt) => match &**stmt {
-                StatementNode::Expression(ExpressionNode::Literal(token)) => match &token.kind {
-                    TokenKind::Integer(value) => assert_eq!(*value, 42),
-                    _ => panic!("Expected integer token"),
+                StatementNode::Expression(expr_stmt) => match &expr_stmt.expression {
+                    ExpressionNode::Literal(token) => match &token.kind {
+                        TokenKind::Integer(value) => assert_eq!(*value, 42),
+                        _ => panic!("Expected integer token"),
+                    },
+                    _ => panic!("Expected literal expression"),
                 },
                 _ => panic!("Expected expression statement with literal"),
             },
@@ -441,16 +516,19 @@ mod tests {
 
     #[test]
     fn test_simple_identifier() {
-        let result = lex_and_parse("foo");
+        let result = lex_and_parse("foo;");
         assert!(result.is_ok());
         let cst = result.unwrap();
         assert_eq!(cst.items.len(), 1);
 
         match &cst.items[0] {
             CstNode::Statement(stmt) => match &**stmt {
-                StatementNode::Expression(ExpressionNode::Identifier(token)) => match &token.kind {
-                    TokenKind::Ident(name) => assert_eq!(name, "foo"),
-                    _ => panic!("Expected identifier token"),
+                StatementNode::Expression(expr_stmt) => match &expr_stmt.expression {
+                    ExpressionNode::Identifier(token) => match &token.kind {
+                        TokenKind::Ident(name) => assert_eq!(name, "foo"),
+                        _ => panic!("Expected identifier token"),
+                    },
+                    _ => panic!("Expected identifier expression"),
                 },
                 _ => panic!("Expected expression statement with identifier"),
             },
@@ -460,36 +538,39 @@ mod tests {
 
     #[test]
     fn test_binary_expression() {
-        let result = lex_and_parse("2 + 3");
+        let result = lex_and_parse("2 + 3;");
         assert!(result.is_ok());
         let cst = result.unwrap();
         assert_eq!(cst.items.len(), 1);
 
         match &cst.items[0] {
             CstNode::Statement(stmt) => match &**stmt {
-                StatementNode::Expression(ExpressionNode::Binary(binary)) => {
-                    // Check left operand
-                    match &*binary.left {
-                        ExpressionNode::Literal(token) => match &token.kind {
-                            TokenKind::Integer(value) => assert_eq!(*value, 2),
-                            _ => panic!("Expected integer token for left operand"),
-                        },
-                        _ => panic!("Expected literal for left operand"),
-                    }
+                StatementNode::Expression(expr_stmt) => match &expr_stmt.expression {
+                    ExpressionNode::Binary(binary) => {
+                        // Check left operand
+                        match &*binary.left {
+                            ExpressionNode::Literal(token) => match &token.kind {
+                                TokenKind::Integer(value) => assert_eq!(*value, 2),
+                                _ => panic!("Expected integer token for left operand"),
+                            },
+                            _ => panic!("Expected literal for left operand"),
+                        }
 
-                    // Check operator
-                    assert_eq!(binary.operator.kind, TokenKind::Plus);
+                        // Check operator
+                        assert_eq!(binary.operator.kind, TokenKind::Plus);
 
-                    // Check right operand
-                    match &*binary.right {
-                        ExpressionNode::Literal(token) => match &token.kind {
-                            TokenKind::Integer(value) => assert_eq!(*value, 3),
-                            _ => panic!("Expected integer token for right operand"),
-                        },
-                        _ => panic!("Expected literal for right operand"),
+                        // Check right operand
+                        match &*binary.right {
+                            ExpressionNode::Literal(token) => match &token.kind {
+                                TokenKind::Integer(value) => assert_eq!(*value, 3),
+                                _ => panic!("Expected integer token for right operand"),
+                            },
+                            _ => panic!("Expected literal for right operand"),
+                        }
                     }
-                }
-                _ => panic!("Expected binary expression"),
+                    _ => panic!("Expected binary expression"),
+                },
+                _ => panic!("Expected expression statement with binary expression"),
             },
             _ => panic!("Expected statement"),
         }
@@ -497,34 +578,37 @@ mod tests {
 
     #[test]
     fn test_function_call() {
-        let result = lex_and_parse("factorial(5)");
+        let result = lex_and_parse("factorial(5);");
         assert!(result.is_ok());
         let cst = result.unwrap();
         assert_eq!(cst.items.len(), 1);
 
         match &cst.items[0] {
             CstNode::Statement(stmt) => match &**stmt {
-                StatementNode::Expression(ExpressionNode::Call(call)) => {
-                    // Check function name
-                    match &*call.function {
-                        ExpressionNode::Identifier(token) => match &token.kind {
-                            TokenKind::Ident(name) => assert_eq!(name, "factorial"),
-                            _ => panic!("Expected identifier token for function name"),
-                        },
-                        _ => panic!("Expected identifier for function name"),
-                    }
+                StatementNode::Expression(expr_stmt) => match &expr_stmt.expression {
+                    ExpressionNode::Call(call) => {
+                        // Check function name
+                        match &*call.function {
+                            ExpressionNode::Identifier(token) => match &token.kind {
+                                TokenKind::Ident(name) => assert_eq!(name, "factorial"),
+                                _ => panic!("Expected identifier token for function name"),
+                            },
+                            _ => panic!("Expected identifier for function name"),
+                        }
 
-                    // Check arguments
-                    assert_eq!(call.args.len(), 1);
-                    match &call.args[0] {
-                        ExpressionNode::Literal(token) => match &token.kind {
-                            TokenKind::Integer(value) => assert_eq!(*value, 5),
-                            _ => panic!("Expected integer token for argument"),
-                        },
-                        _ => panic!("Expected literal for argument"),
+                        // Check arguments
+                        assert_eq!(call.args.len(), 1);
+                        match &call.args[0] {
+                            ExpressionNode::Literal(token) => match &token.kind {
+                                TokenKind::Integer(value) => assert_eq!(*value, 5),
+                                _ => panic!("Expected integer token for argument"),
+                            },
+                            _ => panic!("Expected literal for argument"),
+                        }
                     }
-                }
-                _ => panic!("Expected function call"),
+                    _ => panic!("Expected function call"),
+                },
+                _ => panic!("Expected expression statement with function call"),
             },
             _ => panic!("Expected statement"),
         }
@@ -532,7 +616,7 @@ mod tests {
 
     #[test]
     fn test_let_statement() {
-        let result = lex_and_parse("let x = 42");
+        let result = lex_and_parse("let x = 42;");
         assert!(result.is_ok());
         let cst = result.unwrap();
         assert_eq!(cst.items.len(), 1);
@@ -583,8 +667,8 @@ mod tests {
                     _ => panic!("Expected identifier token for parameter"),
                 }
 
-                // Check body has one statement
-                assert_eq!(func.body.statements.len(), 1);
+                // Check body has a final expression
+                assert!(func.body.final_expr.is_some());
             }
             _ => panic!("Expected function"),
         }
@@ -619,11 +703,11 @@ fn main() {
                     _ => panic!("Expected identifier token for factorial function name"),
                 }
 
-                // Check that the body contains an if statement
-                assert_eq!(func.body.statements.len(), 1);
-                match &func.body.statements[0] {
-                    StatementNode::If(_) => {} // Success
-                    _ => panic!("Expected if statement in factorial function"),
+                // Check that the body contains a final expression (the if expression)
+                assert!(func.body.final_expr.is_some());
+                match &func.body.final_expr {
+                    Some(ExpressionNode::If(_)) => {} // Success
+                    _ => panic!("Expected if expression in factorial function"),
                 }
             }
             _ => panic!("Expected factorial function"),
@@ -637,11 +721,11 @@ fn main() {
                     _ => panic!("Expected identifier token for main function name"),
                 }
 
-                // Check that the body contains a function call
-                assert_eq!(func.body.statements.len(), 1);
-                match &func.body.statements[0] {
-                    StatementNode::Expression(ExpressionNode::Call(_)) => {} // Success
-                    _ => panic!("Expected function call in main function"),
+                // Check that the body contains a function call as final expression
+                assert!(func.body.final_expr.is_some());
+                match &func.body.final_expr {
+                    Some(ExpressionNode::Call(_)) => {} // Success
+                    _ => panic!("Expected function call as final expression in main function"),
                 }
             }
             _ => panic!("Expected main function"),
@@ -650,54 +734,55 @@ fn main() {
 
     #[test]
     fn test_while_statement() {
-        let result = lex_and_parse("while x <= 10 { x }");
+        let result = lex_and_parse("while x <= 10 { x };");
         assert!(result.is_ok());
         let cst = result.unwrap();
         assert_eq!(cst.items.len(), 1);
 
         match &cst.items[0] {
             CstNode::Statement(stmt) => match &**stmt {
-                StatementNode::While(while_stmt) => {
-                    // Check condition is a binary expression
-                    match &while_stmt.condition {
-                        ExpressionNode::Binary(binary) => {
-                            // Check left operand
-                            match &*binary.left {
-                                ExpressionNode::Identifier(token) => match &token.kind {
-                                    TokenKind::Ident(name) => assert_eq!(name, "x"),
-                                    _ => panic!("Expected identifier token for left operand"),
-                                },
-                                _ => panic!("Expected identifier for left operand"),
-                            }
+                StatementNode::Expression(expr_stmt) => match &expr_stmt.expression {
+                    ExpressionNode::While(while_stmt) => {
+                        // Check condition is a binary expression
+                        match &while_stmt.condition {
+                            ExpressionNode::Binary(binary) => {
+                                // Check left operand
+                                match &*binary.left {
+                                    ExpressionNode::Identifier(token) => match &token.kind {
+                                        TokenKind::Ident(name) => assert_eq!(name, "x"),
+                                        _ => panic!("Expected identifier token for left operand"),
+                                    },
+                                    _ => panic!("Expected identifier for left operand"),
+                                }
 
-                            // Check operator
-                            assert_eq!(binary.operator.kind, TokenKind::LessEqual);
+                                // Check operator
+                                assert_eq!(binary.operator.kind, TokenKind::LessEqual);
 
-                            // Check right operand
-                            match &*binary.right {
-                                ExpressionNode::Literal(token) => match &token.kind {
-                                    TokenKind::Integer(value) => assert_eq!(*value, 10),
-                                    _ => panic!("Expected integer token for right operand"),
-                                },
-                                _ => panic!("Expected literal for right operand"),
+                                // Check right operand
+                                match &*binary.right {
+                                    ExpressionNode::Literal(token) => match &token.kind {
+                                        TokenKind::Integer(value) => assert_eq!(*value, 10),
+                                        _ => panic!("Expected integer token for right operand"),
+                                    },
+                                    _ => panic!("Expected literal for right operand"),
+                                }
                             }
+                            _ => panic!("Expected binary expression for condition"),
                         }
-                        _ => panic!("Expected binary expression for condition"),
-                    }
 
-                    // Check body has one statement
-                    assert_eq!(while_stmt.body.statements.len(), 1);
-                    match &while_stmt.body.statements[0] {
-                        StatementNode::Expression(ExpressionNode::Identifier(token)) => {
-                            match &token.kind {
+                        // Check body has final expression
+                        assert!(while_stmt.body.final_expr.is_some());
+                        match &while_stmt.body.final_expr {
+                            Some(ExpressionNode::Identifier(token)) => match &token.kind {
                                 TokenKind::Ident(name) => assert_eq!(name, "x"),
                                 _ => panic!("Expected identifier token in body"),
-                            }
+                            },
+                            _ => panic!("Expected identifier as final expression in body"),
                         }
-                        _ => panic!("Expected identifier expression in body"),
                     }
-                }
-                _ => panic!("Expected while statement"),
+                    _ => panic!("Expected while expression"),
+                },
+                _ => panic!("Expected expression statement with while expression"),
             },
             _ => panic!("Expected statement"),
         }
@@ -705,7 +790,7 @@ fn main() {
 
     #[test]
     fn test_assign_statement() {
-        let result = lex_and_parse("x = 42");
+        let result = lex_and_parse("x = 42;");
         assert!(result.is_ok());
         let cst = result.unwrap();
         assert_eq!(cst.items.len(), 1);

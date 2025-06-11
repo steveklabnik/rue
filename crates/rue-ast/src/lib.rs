@@ -38,6 +38,7 @@ pub struct ParamListNode {
 pub struct BlockNode {
     pub open_brace: TokenNode,
     pub statements: Vec<StatementNode>,
+    pub final_expr: Option<ExpressionNode>,
     pub close_brace: TokenNode,
     pub trivia: Trivia,
 }
@@ -46,9 +47,7 @@ pub struct BlockNode {
 pub enum StatementNode {
     Let(LetStatementNode),
     Assign(AssignStatementNode),
-    Expression(ExpressionNode),
-    If(Box<IfStatementNode>),
-    While(Box<WhileStatementNode>),
+    Expression(ExpressionStatementNode),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,6 +56,7 @@ pub struct LetStatementNode {
     pub name: TokenNode,
     pub equals: TokenNode,
     pub value: ExpressionNode,
+    pub semicolon: TokenNode,
     pub trivia: Trivia,
 }
 
@@ -65,6 +65,14 @@ pub struct AssignStatementNode {
     pub name: TokenNode,
     pub equals: TokenNode,
     pub value: ExpressionNode,
+    pub semicolon: TokenNode,
+    pub trivia: Trivia,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExpressionStatementNode {
+    pub expression: ExpressionNode,
+    pub semicolon: TokenNode,
     pub trivia: Trivia,
 }
 
@@ -86,7 +94,7 @@ pub struct ElseClauseNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ElseBodyNode {
-    Block(BlockNode),
+    Block(Box<BlockNode>),
     If(Box<IfStatementNode>), // for else if
 }
 
@@ -102,6 +110,8 @@ pub struct WhileStatementNode {
 pub enum ExpressionNode {
     Binary(BinaryExprNode),
     Call(CallExprNode),
+    If(Box<IfStatementNode>),
+    While(Box<WhileStatementNode>),
     Identifier(TokenNode),
     Literal(TokenNode),
 }

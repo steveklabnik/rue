@@ -39,7 +39,7 @@ integer_literal ::= digit+
 
 #### 2.2.5 Delimiters
 ```
-( ) { } ,
+( ) { } , ;
 ```
 
 #### 2.2.6 Whitespace
@@ -64,11 +64,11 @@ block ::= "{" statement* expression? "}"
 
 statement ::= let_statement | assignment_statement | expression_statement
 
-let_statement ::= "let" identifier "=" expression
+let_statement ::= "let" identifier "=" expression ";"
 
-assignment_statement ::= identifier "=" expression
+assignment_statement ::= identifier "=" expression ";"
 
-expression_statement ::= expression
+expression_statement ::= expression ";"
 
 expression ::= if_expression | while_expression | binary_expression | call_expression | primary_expression
 
@@ -163,17 +163,17 @@ Function calls:
 
 ### 5.3 Statements
 
-#### 5.3.1 Variable Declaration
-`let` statements declare a new variable in the current scope and initialize it with the value of the expression.
+#### 5.3.1 Let Statements
+`let` statements declare a new variable in the current scope and initialize it with the value of the expression. They are terminated with a semicolon.
 
-#### 5.3.2 Assignment
-Assignment statements update the value of an existing variable. The variable must be previously declared in an accessible scope.
+#### 5.3.2 Assignment Statements
+Assignment statements update the value of an existing variable. The variable must be previously declared in an accessible scope. They are terminated with a semicolon.
 
 #### 5.3.3 Expression Statements
-Expression statements evaluate an expression and discard the result.
+Expression statements evaluate an expression and discard the result. They are terminated with a semicolon.
 
 ### 5.4 Blocks
-Blocks execute their statements in order, then evaluate their final expression (if present). The block's value is the value of the final expression, or 0 if there is no final expression.
+Blocks execute their statements in order, then evaluate their final expression (if present). Statements are terminated with semicolons and executed for their side effects. The optional final expression has no semicolon and its value becomes the block's value. If there is no final expression, the block evaluates to 0.
 
 ## 6. Standard Library
 
@@ -209,11 +209,11 @@ fn main() {
 }
 ```
 
-### 7.3 Variable Assignment
+### 7.3 Let and Assignment Statements
 ```rue
 fn main() {
-    let x = 42
-    x = x + 58
+    let x = 42;
+    x = x + 58;
     x
 }
 ```
@@ -222,8 +222,8 @@ fn main() {
 ```rue
 fn countdown(n) {
     while n > 0 {
-        n = n - 1
-    }
+        n = n - 1;
+    };
     n
 }
 
