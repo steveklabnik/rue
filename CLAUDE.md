@@ -15,7 +15,8 @@ Key features:
 - All variables are 64-bit integers
 - Supports functions, arithmetic, and if/else
 
-For complete language and implementation details, see [spec.md](./spec.md).
+For complete language specification, see [docs/spec.md](./docs/spec.md).
+For implementation details, see [docs/implementation.md](./docs/implementation.md).
 
 ## Development Commands
 
@@ -132,3 +133,22 @@ When adding new dependencies or getting build script warnings from `reindeer buc
 3. Create fixups/ directories and fixups.toml files for warned crates
 4. Run `reindeer buckify` again to apply fixups
 5. Test with `buck2 test //crates/...`
+
+## Language Specification Maintenance
+
+**CRITICAL**: When implementing new language features or modifying existing language behavior:
+
+1. **Update the formal specification FIRST** - Modify [docs/spec.md](./docs/spec.md) before implementing
+2. **Specification-driven development** - The language spec is the authoritative definition of Rue
+3. **Update examples and tests** - Ensure spec examples match implementation behavior
+4. **Version the specification** - Track language version changes in the spec document
+5. **Validate against spec** - Implementation must conform to the formal specification
+
+The formal language specification in `docs/spec.md` is designed to be implementation-independent. Any alternative Rue compiler should be able to use this specification to achieve compatibility.
+
+**Workflow for language changes:**
+1. Propose specification changes in `docs/spec.md`
+2. Update grammar, semantics, and examples as needed
+3. Implement the feature in the compiler
+4. Verify implementation matches specification exactly
+5. Add conformance tests that validate spec compliance
