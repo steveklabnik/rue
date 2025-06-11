@@ -23,7 +23,7 @@
       "patterns": [
         {
           "name": "keyword.control.rue",
-          "match": "\\b(if|else|fn|let)\\b"
+          "match": "\\b(if|else|fn|let|while)\\b"
         }
       ]
     },

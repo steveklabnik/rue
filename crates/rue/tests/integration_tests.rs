@@ -140,6 +140,11 @@ fn test_factorial_program() {
 }
 
 #[test]
+fn test_while_loop_program() {
+    test_rue_program("countdown", 42);
+}
+
+#[test]
 fn test_all_samples_compile() {
     let project_root = get_project_root();
 

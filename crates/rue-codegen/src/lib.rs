@@ -28,6 +28,7 @@ pub enum Instruction {
     Je(String),   // Jump if equal
     Jne(String),  // Jump if not equal
     Jle(String),  // Jump if less or equal
+    Jg(String),   // Jump if greater
     Call(String), // Function call
     Ret,          // Return
 
@@ -293,6 +294,36 @@ impl Codegen {
                     Ok(None)
                 }
             }
+            StatementNode::While(while_stmt) => {
+                let loop_start = self.next_label("loop_start");
+                let loop_end = self.next_label("loop_end");
+
+                // Loop start label
+                self.emit(Instruction::Label(loop_start.clone()));
+
+                // Generate condition
+                self.generate_expression(&while_stmt.condition, scope)?;
+
+                // Compare with 0 (false) and jump to end if condition is false
+                self.emit(Instruction::Cmp(
+                    Operand::Register(Register::Rax),
+                    Operand::Immediate(0),
+                ));
+                self.emit(Instruction::Je(loop_end.clone()));
+
+                // Generate loop body
+                for stmt in &while_stmt.body.statements {
+                    self.generate_statement(stmt, scope)?;
+                }
+
+                // Jump back to condition check
+                self.emit(Instruction::Jmp(loop_start));
+
+                // Loop end label
+                self.emit(Instruction::Label(loop_end));
+
+                Ok(None) // While loops don't return values
+            }
         }
     }
 
@@ -383,6 +414,31 @@ impl Codegen {
                         let end_label = self.next_label("le_end");
 
                         self.emit(Instruction::Jle(true_label.clone()));
+                        // False case
+                        self.emit(Instruction::Mov(
+                            Operand::Register(Register::Rax),
+                            Operand::Immediate(0),
+                        ));
+                        self.emit(Instruction::Jmp(end_label.clone()));
+                        // True case
+                        self.emit(Instruction::Label(true_label));
+                        self.emit(Instruction::Mov(
+                            Operand::Register(Register::Rax),
+                            Operand::Immediate(1),
+                        ));
+                        self.emit(Instruction::Label(end_label));
+                    }
+                    rue_lexer::TokenKind::Greater => {
+                        // rbx > rax ? 1 : 0
+                        self.emit(Instruction::Cmp(
+                            Operand::Register(Register::Rbx),
+                            Operand::Register(Register::Rax),
+                        ));
+                        let true_label = self.next_label("gt_true");
+                        let end_label = self.next_label("gt_end");
+
+                        // Need to add Jg instruction
+                        self.emit(Instruction::Jg(true_label.clone()));
                         // False case
                         self.emit(Instruction::Mov(
                             Operand::Register(Register::Rax),
@@ -511,6 +567,7 @@ impl Assembler {
             Instruction::Je(_) => 6,   // je rel32 = 0f 84 imm32
             Instruction::Jne(_) => 6,  // jne rel32 = 0f 85 imm32
             Instruction::Jle(_) => 6,  // jle rel32 = 0f 8e imm32
+            Instruction::Jg(_) => 6,   // jg rel32 = 0f 8f imm32
             Instruction::Call(_) => 5, // call rel32 = e8 imm32
             Instruction::Ret => 1,     // ret = c3
             Instruction::Mov(dst, src) => {
@@ -695,6 +752,13 @@ impl Assembler {
                 // jle rel32 = 0f 8e imm32
                 self.code.push(0x0f);
                 self.code.push(0x8e);
+                self.add_relocation(label.clone(), RelocationType::Rel32);
+                self.code.extend_from_slice(&[0, 0, 0, 0]); // Placeholder for address
+            }
+            Instruction::Jg(label) => {
+                // jg rel32 = 0f 8f imm32
+                self.code.push(0x0f);
+                self.code.push(0x8f);
                 self.add_relocation(label.clone(), RelocationType::Rel32);
                 self.code.extend_from_slice(&[0, 0, 0, 0]); // Placeholder for address
             }

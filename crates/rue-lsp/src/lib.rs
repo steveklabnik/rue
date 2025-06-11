@@ -141,3 +141,51 @@ pub async fn run_server() {
     let (service, socket) = LspService::new(RueLanguageServer::new);
     Server::new(stdin, stdout, socket).serve(service).await;
 }
+
+#[cfg(test)]
+mod tests {
+    use rue_lexer::Lexer;
+    use rue_parser::parse;
+
+    #[test]
+    fn test_while_loop_parsing() {
+        let text = r#"
+fn test_while(n) {
+    while n > 0 {
+        n + 1
+    }
+    42
+}
+
+fn main() {
+    test_while(5)
+}
+"#;
+
+        let mut lexer = Lexer::new(text);
+        let tokens = lexer.tokenize();
+        let result = parse(tokens);
+
+        assert!(result.is_ok(), "While loop should parse without errors");
+    }
+
+    #[test]
+    fn test_invalid_while_syntax() {
+        let text = r#"
+fn test_invalid() {
+    while {
+        42
+    }
+}
+"#;
+
+        let mut lexer = Lexer::new(text);
+        let tokens = lexer.tokenize();
+        let result = parse(tokens);
+
+        assert!(
+            result.is_err(),
+            "Invalid while syntax should produce errors"
+        );
+    }
+}
