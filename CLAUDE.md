@@ -34,6 +34,13 @@ For implementation details, see [docs/implementation.md](./docs/implementation.m
 - `cargo test -p rue-lsp` - Run LSP server tests (Buck2 has third-party dependency compilation issues)
 - `cargo test` - Run all tests across all packages
 
+**Running Specific Test Subsets:**
+- `cargo test -p rue-lexer test_name` - Run specific lexer test
+- `cargo test -p rue-parser parse_` - Run all parser tests matching pattern
+- `buck2 test //crates/rue-lexer:test -- --filter keyword` - Filter Buck2 tests by keyword
+- `cargo test integration_tests` - Run only integration tests
+- `cargo test -- --nocapture` - Show println! output during tests
+
 ### Compiling and Running Programs
 - `buck2 run //crates/rue:rue samples/simple.rue` - Compile simple.rue to executable
 - `buck2 run //crates/rue:rue <source.rue>` - Compile any rue source file
@@ -77,23 +84,34 @@ When compiled programs crash or behave unexpectedly:
 - Wrong exit codes suggest incorrect System V ABI implementation
 - Use `echo $?` after running to check exit code
 
-## Architecture
+### Debugging the Compiler Itself
+When the rue compiler crashes, fails to compile, or produces incorrect output:
 
-### Compiler Pipeline
-- **Lexer** → **Parser** → **Semantic Analysis** → **Code Generation** → **Assembly** → **ELF Generation**
-- Hand-written recursive descent parser produces concrete syntax trees
-- Salsa-based incremental compilation for semantic analysis
-- Stack-based expression evaluation with x86-64 instruction generation
-- Two-pass assembler with symbol resolution and relocation
-- Direct ELF executable generation (no external linker required)
+**Compiler Crashes:**
+- `RUST_BACKTRACE=1 buck2 run //crates/rue:rue samples/simple.rue` - Get Rust backtrace
+- `RUST_BACKTRACE=full buck2 run //crates/rue:rue samples/simple.rue` - Get full backtrace with line numbers
+- `gdb --args ./target/debug/rue samples/simple.rue` - Debug with gdb if using cargo build
 
-### Key Design Decisions
-- IDE-first design with concrete syntax trees
-- Expression-level incremental computation
-- Separate arrays for different AST node types (ECS-inspired)
-- No traditional compiler/linker split - generates executables directly
-- System V AMD64 ABI compliance for C library compatibility
-- Stack-based evaluation prioritizing correctness over optimization
+**Compilation Issues:**
+- `buck2 run //crates/rue:rue samples/simple.rue -- --verbose` - Enable verbose output (if supported)
+- Add `dbg!()` or `println!()` statements in compiler source for tracing
+- Check lexer output by examining `rue-lexer` tests
+- Check parser output by examining `rue-parser` tests
+
+**Code Generation Issues:**
+- Compare generated assembly against working examples
+- Verify ELF structure: `readelf -a output_file`
+- Check symbol table: `nm output_file`
+- Disassemble generated code: `objdump -d output_file`
+
+## Architecture Constraints
+
+### Platform and ABI Requirements
+- **Linux x86-64 only** - generates ELF executables
+- **System V AMD64 ABI compliance** - for C library compatibility
+- **Stack-based evaluation** - prioritizes correctness over optimization
+- **Direct ELF generation** - no external linker dependency
+- **IDE-first design** - concrete syntax trees for better tooling support
 
 ### CI/CD Notes
 - The rue compiler requires a source file argument - it cannot run with no arguments
@@ -102,10 +120,55 @@ When compiled programs crash or behave unexpectedly:
 - Always test both buck2 and cargo build systems for consistency
 
 ### Version Control
-This project uses jj (Jujutsu) instead of git. Common commands:
-- `jj status` - see current changes
-- `jj commit -m "message"` - commit changes
-- `jj log` - view commit history
+
+**IMPORTANT**: This project uses jj (Jujutsu) exclusively. NEVER use git commands.
+
+#### Basic jj Commands
+- `jj status` - Show current changes and working copy status
+- `jj commit -m "message"` - Commit current changes with a message
+- `jj describe -m "message"` - Set/update description of current change
+- `jj log` - View commit history (graphical view)
+- `jj diff` - Show diff of current changes
+- `jj files` - List files changed in working copy
+- `jj show` - Show details of current commit
+
+#### Branch Management
+- `jj new` - Create new change (equivalent to git checkout -b)
+- `jj new trunk` - Create new change based on trunk
+- `jj edit <commit>` - Switch to editing a specific commit
+- `jj abandon` - Abandon current change
+
+#### Synchronization and Pull Requests
+- `jj git fetch` - Fetch changes from remote repository
+- `jj rebase -d trunk` - Rebase current change onto trunk
+- `jj git push -c @` - Push current change and create bookmark (@ refers to current change)
+
+**Pull Request Workflow:**
+1. `jj new trunk` - Create new change from trunk
+2. Make your changes and test them
+3. `jj commit -m "descriptive message"` - Commit changes
+4. `jj git push -c @` - Push to remote and create bookmark (note the bookmark name from output)
+5. `gh pr create --head <bookmark-name-from-step-4>` - Create pull request using the bookmark name shown in previous step
+6. After review: `jj git fetch && jj rebase -d trunk` if needed
+
+**Pull Request Message Guidelines:**
+- Keep descriptions concise and technical, avoid LLM-style verbosity
+- Focus on what was changed, not implementation details
+- Use bullet points for multiple changes
+- Avoid phrases like "This PR", "I have implemented", or overly formal language
+- Example: "Add while loops to parser and codegen" rather than "This pull request implements comprehensive while loop support across the compiler pipeline"
+
+#### Commit Message Guidelines
+- Write in imperative mood and present tense
+- Be descriptive about what the change accomplishes
+- **If the change modifies spec.md**: Use the language specification change as the primary basis for the commit message, as this describes the fundamental change being made to the language
+- Examples: "Add while loop support to parser", "Fix segfault in code generation", "Add assignment operators to the language"
+
+#### Advanced Operations
+- `jj split` - Split current change into multiple commits
+- `jj squash` - Squash changes into parent commit
+- `jj duplicate` - Create duplicate of current change
+- `jj restore <file>` - Restore file from parent commit
 
 ### Reindeer and Buck2 Dependency Management
 
