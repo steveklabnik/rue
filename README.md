@@ -1,5 +1,13 @@
 # rue
 
+> [!CAUTION]
+> Listen, this repo is just for fun. I had it private, but I care more about
+> being able to run GitHub Actions to make sure that things are good, so I'm
+> open sourcing this repo. Not everything in here is good, or accurate, or
+> anything: I'm just messing around. Feel free to take a look but don't look too
+> much into this just yet. Someday I'll actually talk about this.
+
+
 A programming language that starts as a minimal subset of Rust, designed to explore cutting-edge compiler implementation techniques.
 
 **Platform Support**: Linux x86-64 only
