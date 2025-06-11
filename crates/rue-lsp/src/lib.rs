@@ -188,4 +188,25 @@ fn test_invalid() {
             "Invalid while syntax should produce errors"
         );
     }
+
+    #[test]
+    fn test_assignment_parsing() {
+        let text = r#"
+fn test_assignment() {
+    let x = 42
+    x = 100
+    x
+}
+
+fn main() {
+    test_assignment()
+}
+"#;
+
+        let mut lexer = Lexer::new(text);
+        let tokens = lexer.tokenize();
+        let result = parse(tokens);
+
+        assert!(result.is_ok(), "Assignment should parse without errors");
+    }
 }

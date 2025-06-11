@@ -117,6 +117,19 @@ impl Parser {
             TokenKind::While => Ok(StatementNode::While(Box::new(
                 self.parse_while_statement()?,
             ))),
+            TokenKind::Ident(_) => {
+                // Look ahead to see if this is an assignment (identifier = expression)
+                if self.current + 1 < self.tokens.len() {
+                    match &self.tokens[self.current + 1].kind {
+                        TokenKind::Assign => {
+                            Ok(StatementNode::Assign(self.parse_assign_statement()?))
+                        }
+                        _ => Ok(StatementNode::Expression(self.parse_expression()?)),
+                    }
+                } else {
+                    Ok(StatementNode::Expression(self.parse_expression()?))
+                }
+            }
             _ => Ok(StatementNode::Expression(self.parse_expression()?)),
         }
     }
@@ -130,6 +143,23 @@ impl Parser {
 
         Ok(LetStatementNode {
             let_token,
+            name,
+            equals,
+            value,
+            trivia: Trivia {
+                leading: leading_trivia,
+                trailing: self.consume_trivia(),
+            },
+        })
+    }
+
+    fn parse_assign_statement(&mut self) -> ParseResult<AssignStatementNode> {
+        let leading_trivia = self.consume_trivia();
+        let name = self.expect_ident()?;
+        let equals = self.expect_kind(&TokenKind::Assign)?;
+        let value = self.parse_expression()?;
+
+        Ok(AssignStatementNode {
             name,
             equals,
             value,
@@ -668,6 +698,37 @@ fn main() {
                     }
                 }
                 _ => panic!("Expected while statement"),
+            },
+            _ => panic!("Expected statement"),
+        }
+    }
+
+    #[test]
+    fn test_assign_statement() {
+        let result = lex_and_parse("x = 42");
+        assert!(result.is_ok());
+        let cst = result.unwrap();
+        assert_eq!(cst.items.len(), 1);
+
+        match &cst.items[0] {
+            CstNode::Statement(stmt) => match &**stmt {
+                StatementNode::Assign(assign_stmt) => {
+                    // Check variable name
+                    match &assign_stmt.name.kind {
+                        TokenKind::Ident(name) => assert_eq!(name, "x"),
+                        _ => panic!("Expected identifier token for variable name"),
+                    }
+
+                    // Check value
+                    match &assign_stmt.value {
+                        ExpressionNode::Literal(token) => match &token.kind {
+                            TokenKind::Integer(value) => assert_eq!(*value, 42),
+                            _ => panic!("Expected integer token for value"),
+                        },
+                        _ => panic!("Expected literal for value"),
+                    }
+                }
+                _ => panic!("Expected assign statement"),
             },
             _ => panic!("Expected statement"),
         }

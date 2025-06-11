@@ -41,7 +41,8 @@ For complete language and implementation details, see [spec.md](./spec.md).
 ### Example Programs
 - `samples/simple.rue` - Basic program that returns 42
 - `samples/factorial.rue` - Recursive factorial function (returns 120 for factorial(5))
-- Test compilation: `buck2 run //crates/rue:rue samples/simple.rue && ./simple && echo "Exit code: $?"`
+- `samples/simple_assignment.rue` - Basic assignment demonstration (returns 100)
+- Test compilation: `buck2 run //crates/rue:rue samples/simple.rue; ./simple; echo "Exit code: $?"`
 
 ### LSP and IDE Support
 - `cargo run -p rue-lsp` - Start the Language Server Protocol server

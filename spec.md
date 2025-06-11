@@ -8,8 +8,9 @@ Rue is a programming language that begins as a minimal subset of Rust, designed 
 
 ### Core Language
 - **Variables**: All variables are 64-bit integers, declared with `let`
+- **Assignment**: Variables can be reassigned with `=` after declaration
 - **Arithmetic**: Basic operations (+, -, *, /, %)
-- **Control Flow**: if/else statements only
+- **Control Flow**: if/else statements and while loops
 - **Functions**: Single parameter, single return value
 - **Type System**: No explicit type annotations (everything is i64)
 - **Error Handling**: Abort on errors (e.g., division by zero)
@@ -32,6 +33,15 @@ fn factorial(n) {
 
 fn main() {
     factorial(5)  // Returns 120 as the exit code
+}
+```
+
+### Assignment Example
+```rue
+fn main() {
+    let x = 10
+    x = x + 5  // Reassign x to 15
+    x          // Returns 15 as exit code
 }
 ```
 
