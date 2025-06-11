@@ -102,8 +102,8 @@ See `crates/rue-lsp/README.md` for editor integration details.
 
 ## Development
 
-See [docs/spec.md](./docs/spec.md) for the complete language specification and
-[CLAUDE.md](./CLAUDE.md) for development guidance.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development guidance and
+[docs/spec.md](./docs/spec.md) for the complete language specification.
 
 ## License
 
