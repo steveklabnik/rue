@@ -25,7 +25,7 @@ jobs:
     - name: Validate CLAUDE.md and spec.md exist
       run: |
         test -f CLAUDE.md
-        test -f spec.md
+        test -f docs/spec.md
         echo "✓ Core documentation files present"
     
     - name: Check for TODO markers in code
