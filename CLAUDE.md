@@ -227,3 +227,42 @@ When making significant changes to the project:
 3. **Update build instructions** - Ensure both Cargo and Buck2 examples work correctly
 4. **Language feature updates** - When adding/removing language features, update the feature list
 5. **Sample programs** - Verify example programs still compile and run as described
+
+### Design Documentation Workflow
+
+When working on significant features or architectural changes:
+
+**Documentation Structure:**
+- `docs/sessions/session-N-feature-name/` - Contains all session-related documentation
+  - `session-summary.md` - **Permanent** - High-level summary of what was accomplished
+  - `design-decisions.md` - **Permanent** - Design rationale, alternatives considered, trade-offs
+  - `implementation-plan.md` - **Temporary** - Step-by-step implementation tasks, deleted when complete
+- `docs/architecture/feature-name/` - **Permanent** - Technical specifications and guides
+- `docs/decisions/NNN-feature-name.md` - **Permanent** - Numbered Architecture Decision Records (ADRs)
+
+**Workflow for Major Features:**
+1. **Start new session** - Create `docs/sessions/session-N-feature-name/` directory
+2. **Document design decisions** - Record why specific choices were made, alternatives considered
+3. **Create implementation plan** - Break down work into concrete tasks with checkboxes (temporary document)
+4. **Implement feature** - Follow the implementation plan, check off completed tasks
+5. **Create permanent documentation** - Move key specs to `docs/architecture/`
+6. **Write session summary** - Document what was accomplished and lessons learned
+7. **Clean up** - Delete temporary implementation plans, keep design decisions and summaries
+
+**Returning to Work:**
+- If `implementation-plan.md` exists in a session directory, that's the current active work
+- Read `design-decisions.md` first for context when returning to implementation
+- Check the **Implementation Checklist** section for small, actionable tasks with checkboxes
+- Update checkboxes as work progresses to track completion status
+- Check `docs/architecture/` for formal specifications and technical details
+
+**Implementation Plan Format:**
+- Include an **Implementation Checklist** at the top with numbered, actionable tasks
+- Use checkboxes `- [ ]` for easy progress tracking
+- Break large tasks into small steps (15-30 minutes each)
+- Number tasks (e.g., **1.1a**, **1.1b**) for easy reference
+- Keep checklist updated as work progresses
+- **Commit each step** with concise messages for checkpoint tracking (can be squashed later)
+- **Update checklist before committing** - mark tasks complete before making the commit
+
+**Important:** Implementation plans are working documents that get deleted when complete. Design decisions and session summaries are permanent historical records.
