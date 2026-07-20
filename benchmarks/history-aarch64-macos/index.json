@@ -1,0 +1,62 @@
+{
+  "format": "rue-benchmark-history",
+  "platform": "aarch64-macos",
+  "run_count": 9,
+  "shards": [
+    {
+      "first_timestamp": "2026-01-05T02:46:11Z",
+      "last_timestamp": "2026-01-05T02:46:11Z",
+      "path": "shards/2026/01/7245ee0ba8a5ab9932f9c0ea282505f4c3252e7ff8b521af9f0a90a83f90526e.json",
+      "run_count": 1
+    },
+    {
+      "first_timestamp": "2026-01-05T04:18:28Z",
+      "last_timestamp": "2026-01-05T04:18:28Z",
+      "path": "shards/2026/01/5381d4f75aa18f86abc63f31ab2fddab4bd8ea186609ea5c2a9fb3a9434b793c.json",
+      "run_count": 1
+    },
+    {
+      "first_timestamp": "2026-01-05T04:29:28Z",
+      "last_timestamp": "2026-01-05T04:29:28Z",
+      "path": "shards/2026/01/e48d249682157e717dbf3822698c4dabcde868deb7c719d43923f33483dc23bd.json",
+      "run_count": 1
+    },
+    {
+      "first_timestamp": "2026-01-05T06:56:32Z",
+      "last_timestamp": "2026-01-05T06:56:32Z",
+      "path": "shards/2026/01/ef91814dd9ff358667fa238943e05d48b97c42a0d93a239f5544acbd0e000f88.json",
+      "run_count": 1
+    },
+    {
+      "first_timestamp": "2026-01-06T20:16:28Z",
+      "last_timestamp": "2026-01-06T20:16:28Z",
+      "path": "shards/2026/01/3a87741949a7f6bf4ca1cf771101a14c5063195c4f97c85e6e8c551a734888f3.json",
+      "run_count": 1
+    },
+    {
+      "first_timestamp": "2026-01-11T03:24:13Z",
+      "last_timestamp": "2026-01-11T03:24:13Z",
+      "path": "shards/2026/01/641e418649e3829a6497dde6e6137986366f0bbc5e8e8f40743f0a0369b8a0c3.json",
+      "run_count": 1
+    },
+    {
+      "first_timestamp": "2026-01-12T02:12:04Z",
+      "last_timestamp": "2026-01-12T02:12:04Z",
+      "path": "shards/2026/01/3cf022ff9ace028709cca0f18e8fbe640b58bda140e32844cf3dba180fb343b2.json",
+      "run_count": 1
+    },
+    {
+      "first_timestamp": "2026-07-14T01:39:24Z",
+      "last_timestamp": "2026-07-14T01:39:24Z",
+      "path": "shards/2026/07/6e77fd04496e66d0c8bf2eea5438f89ff61ee935b836d830905406368461b8af.json",
+      "run_count": 1
+    },
+    {
+      "first_timestamp": "2026-07-20T04:35:33Z",
+      "last_timestamp": "2026-07-20T04:35:33Z",
+      "path": "shards/2026/07/b14a6303cafbd8762595097ca24eafa6f03907d056df0c81cb84bfd173b55acb.json",
+      "run_count": 1
+    }
+  ],
+  "version": 3
+}
