@@ -11484,6 +11484,25 @@ impl ReceiverTypeIdentity {
     }
 }
 
+/// The language-item registry for the bare-owner callable-symbol reversal
+/// (RUE-1091 r6a). A language-item nominal renders its owner symbol BARE (the
+/// RUE-1089 file-qualification exemption), so its defining module is not
+/// recoverable from the symbol; it is recovered here from the canonical
+/// trusted-standard-library path each language item is defined at. Today the
+/// sole language item is `StrBuf` (`\0rue-std/strbuf.rue`). A bare name that is
+/// not a known language item (an anonymous owner) yields `None` and stays
+/// refused — the residual owned by r6b / the flip.
+#[cfg(test)]
+fn bare_language_item_owner(type_name: &str) -> Option<(ModuleId, rue_air::LangItem)> {
+    match type_name {
+        "StrBuf" => Some((
+            ModuleId::from_trusted_standard_library_path("\0rue-std/strbuf.rue").ok()?,
+            rue_air::LangItem::StrBuf,
+        )),
+        _ => None,
+    }
+}
+
 /// Key for the test-only provider-observation probe task. One task hosts a
 /// batch of provider ops so the driven body's recorded query edges are
 /// inspectable through the terminal's `dependencies()`.
@@ -12148,24 +12167,61 @@ impl rue_air::BodyFactProvider for CompilerBodyFactProvider<'_> {
         if method.is_empty() {
             return None;
         }
-        // The prefix is `Type$file`; a bare prefix (no `$`) is a builtin /
-        // language-item / anonymous owner whose defining module is not recoverable
-        // from the symbol alone — deferred to r6 with the well-known facts.
-        let (type_name, file_component) = prefix.split_once('$')?;
-        if type_name.is_empty() || file_component.is_empty() {
-            return None;
-        }
-        let module_path = rue_air::unmangle_symbol_component(file_component)?;
-        let module = ModuleId::from_logical_path(&module_path).ok()?;
+
+        // Recover the receiver nominal's `(module, type_name)` and the prefix its
+        // forward render must reproduce byte for byte. A `Type$file` prefix names
+        // a user nominal whose module is recovered by un-mangling the file
+        // component. A BARE prefix (no `$`) is a builtin / language-item /
+        // anonymous owner: RUE-1091 r6a LIFTS the language-item class by
+        // recovering its canonical module from the language-item registry (the
+        // module a language item is defined at is not in the symbol, since a
+        // language item renders its owner BARE per the RUE-1089 file-qualification
+        // exemption). A bare owner that is NOT a known language item (an anonymous
+        // owner) stays refused — the residual r6b / the flip owns.
+        let (module, type_name, rendered_prefix, require_lang_item) = match prefix.split_once('$') {
+            Some((type_name, file_component)) => {
+                if type_name.is_empty() || file_component.is_empty() {
+                    return None;
+                }
+                let module_path = rue_air::unmangle_symbol_component(file_component)?;
+                let module = ModuleId::from_logical_path(&module_path).ok()?;
+                // Reproduce the epoch's file-qualified `method_symbol` prefix (the
+                // same `mangle(normalize(path))` composition `struct_symbol_name`
+                // uses).
+                let file = rue_air::mangle_symbol_component(&rue_air::normalize_module_path(
+                    module.as_str(),
+                ));
+                (
+                    module,
+                    type_name.to_owned(),
+                    format!("{type_name}${file}"),
+                    None,
+                )
+            }
+            None => {
+                let (module, lang_item) = bare_language_item_owner(prefix)?;
+                // A language item keeps its BARE owner name, so the rendered prefix
+                // is the bare type name.
+                (
+                    module,
+                    prefix.to_owned(),
+                    prefix.to_owned(),
+                    Some(lang_item),
+                )
+            }
+        };
 
         // Resolve the receiver nominal by its unqualified name in the recovered
         // module (records the lookup-name edge, metered as a name lookup). The
         // receiver is unique or the query fails closed: an absent name, an
         // unavailable index, or an ambiguous nominal (a struct and enum sharing
         // the name) all yield `None`, mirroring the epoch bucket that retains
-        // collisions so ambiguity never depends on iteration order.
+        // collisions so ambiguity never depends on iteration order. For a bare
+        // language-item owner the resolved nominal must additionally carry the
+        // expected language item, so a same-named user nominal or a program
+        // without the trusted nominal fails closed.
         let resolution =
-            self.lookup_unqualified(&module, rue_air::ProviderNamespace::ModuleItem, type_name);
+            self.lookup_unqualified(&module, rue_air::ProviderNamespace::ModuleItem, &type_name);
         let mut nominals = resolution.candidates().iter().filter(|candidate| {
             matches!(
                 candidate.kind,
@@ -12176,12 +12232,17 @@ impl rue_air::BodyFactProvider for CompilerBodyFactProvider<'_> {
         if nominals.next().is_some() {
             return None;
         }
+        if let Some(expected) = require_lang_item
+            && nominal.language_item != Some(expected)
+        {
+            return None;
+        }
         let category = match nominal.kind {
             rue_air::ProviderDefinitionKind::Struct => Cat::Struct,
             rue_air::ProviderDefinitionKind::Enum => Cat::Enum,
             _ => return None,
         };
-        let receiver = ReceiverTypeIdentity::new(module.clone(), type_name, category);
+        let receiver = ReceiverTypeIdentity::new(module.clone(), type_name.as_str(), category);
 
         // Select the unique member of that receiver name whose `self`-receiver
         // classification (sourced from its signature) matches the symbol's form
@@ -12195,14 +12256,10 @@ impl rue_air::BodyFactProvider for CompilerBodyFactProvider<'_> {
             return None;
         }
 
-        // Reproduce the epoch's `method_symbol` rendering (file-qualified via the
-        // same `mangle(normalize(path))` composition the type pool's
-        // `struct_symbol_name` uses) and require a byte-exact match, so a symbol
-        // the epoch could never have produced fails closed.
-        let file_component =
-            rue_air::mangle_symbol_component(&rue_air::normalize_module_path(module.as_str()));
+        // Reproduce the epoch's `method_symbol` rendering and require a byte-exact
+        // match, so a symbol the epoch could never have produced fails closed.
         let separator = if has_self { "." } else { "::" };
-        let rendered = format!("{type_name}${file_component}{separator}{method}");
+        let rendered = format!("{rendered_prefix}{separator}{method}");
         if rendered != symbol {
             return None;
         }
@@ -12291,9 +12348,10 @@ impl rue_air::BodyFactProvider for CompilerBodyFactProvider<'_> {
 // mut`. Deferred with cause (differential documents each): comptime type-ctor
 // calls and their value arguments (the boundary exposes no argument-parameterized
 // comptime-call op, and `DurableSemanticParameter` carries no parameter name —
-// r5); builtin `str`/`Str(...)` and slice generated-struct names (no builtin/slice
-// name fact on the boundary — later slices); anonymous producer nominals (r4) and
-// well-known `Option` (r6). Every operation is `#[cfg(test)]`: this is a
+// r5); builtin `str` and slice generated-struct names are ANSWERED as of r6a
+// (pure durable name facts); `Str(N)` (a generated fixed-capacity struct) →
+// r6b with the generated-struct/anonymous family; anonymous producer nominals
+// (r4) and well-known `Option` (r6b). Every operation is `#[cfg(test)]`: this is a
 // differential adapter behind the same gate as `CompilerBodyFactProvider`, never
 // a selectable production path.
 // ---------------------------------------------------------------------------
@@ -12571,13 +12629,21 @@ impl<'p, 'o, 'db>
     fn builtin_type(
         &mut self,
         _scope: &ModuleId,
-        _name: &str,
+        name: &str,
     ) -> rue_air::SemanticProviderResult<Option<crate::DurableType>, Self::Abort, Self::Failure>
     {
-        // `str` is a builtin nominal the epoch materializes into `type_pool`; the
-        // body-fact boundary exposes no builtin-nominal identity fact yet, so this
-        // shape is deferred (a later slice adds the builtin/well-known fact).
-        Ok(None)
+        // `str` is the sole builtin nominal reachable as bare type-syntax (the
+        // production `builtin_type` answers only `str`; the builtin enums resolve
+        // as root nominals). Its durable identity IS the `BuiltinNominal`
+        // name+kind — a pure durable fact needing no boundary op: the overlay/pool
+        // resolves it to the pre-registered `str` identity exactly as a fresh
+        // import epoch does, and `export_type_local` reproduces the same
+        // `BuiltinNominal { Struct, "str" }` for the epoch's `str` struct
+        // (RUE-1091 r6a — builtin name facts).
+        Ok((name == "str").then(|| crate::DurableType::BuiltinNominal {
+            kind: rue_air::SemanticImportNominalKind::Struct,
+            name: Arc::from("str"),
+        }))
     }
 
     fn root_struct_type(
@@ -12786,15 +12852,19 @@ impl<'p, 'o, 'db>
     fn slice_type(
         &mut self,
         _scope: &ModuleId,
-        _syntax: &str,
-        _element: crate::DurableType,
+        syntax: &str,
+        element: crate::DurableType,
     ) -> rue_air::SemanticProviderResult<crate::DurableType, Self::Abort, Self::Failure> {
-        // The slice's durable form carries the generated slice-struct name, a fact
-        // the epoch mints during materialization and the body-fact boundary does
-        // not expose; deferred to a later slice.
-        Err(rue_air::SemanticProviderError::Failure(
-            ProviderTypeFactsFailure::Deferred("slice generated-struct name"),
-        ))
+        // The generated slice-struct name IS the slice syntax: the epoch's
+        // `get_or_create_slice_struct_from_element` keys the fat-pointer struct by
+        // `syntax`, and `export_type_local` reproduces it as
+        // `Slice { element, name: syntax }`. So the durable form is a pure durable
+        // fact needing no boundary op — the overlay/pool mints the same
+        // fat-pointer struct on materialization (RUE-1091 r6a — slice name facts).
+        Ok(crate::DurableType::Slice {
+            element: Box::new(element),
+            name: Arc::from(syntax),
+        })
     }
 
     fn builtin_type_call(
@@ -19915,16 +19985,73 @@ mod tests {
         assert_eq!(resolved, None, "a function name does not resolve as a type");
     }
 
+    // The builtin `str` and slice `[T]` name facts — RUE-1091 r6a flips these two
+    // arms from documented gaps to positive differentials: their durable identity
+    // is a pure durable fact (a `BuiltinNominal` name+kind for `str`, a
+    // `Slice { element, name: syntax }` for a slice) needing no new boundary op,
+    // matching what `export_type_local` reproduces for the epoch's materialized
+    // `str`/slice struct.
+    #[test]
+    fn provider_type_facts_builtin_str_and_slice_names_match_epoch() {
+        use crate::DurableType as T;
+        let source = "pub struct Point { x: i32 }\n\
+                      fn main() -> i32 { 0 }\n";
+        let snapshot = source_snapshot(&[(1, "/m.rue", "m.rue", source)], 1);
+        let scope = ModuleId::from_logical_path("m.rue").unwrap();
+        let mut database = RevisionedQueryDatabase::default();
+        let revision = revision_for(&mut database, &snapshot);
+
+        // `str` resolves to the durable builtin-nominal identity — the exact form
+        // `export_type_local` reproduces for the epoch's `str` struct.
+        let (resolved, _m, deps) =
+            resolve_type_via_provider(&database, revision, &scope, "str", None);
+        assert_eq!(
+            resolved,
+            Some(T::BuiltinNominal {
+                kind: rue_air::SemanticImportNominalKind::Struct,
+                name: Arc::from("str"),
+            }),
+            "`str` resolves to the builtin-nominal durable identity"
+        );
+        // A pool/overlay-answered name fact records no provider query edge (edge
+        // honesty — the builtin identity is not a boundary lookup).
+        assert!(
+            deps.is_empty(),
+            "resolving `str` records no provider edge: {deps:?}"
+        );
+
+        // `[i32]` resolves to the durable slice identity whose name IS the slice
+        // syntax and whose element is the resolved element type.
+        let (resolved, _m, deps) =
+            resolve_type_via_provider(&database, revision, &scope, "[i32]", None);
+        assert_eq!(
+            resolved,
+            Some(T::Slice {
+                element: Box::new(T::I32),
+                name: Arc::from("[i32]"),
+            }),
+            "`[i32]` resolves to the slice durable identity keyed by the slice syntax"
+        );
+        assert!(
+            deps.is_empty(),
+            "resolving `[i32]` records no provider edge: {deps:?}"
+        );
+    }
+
     // Explicit enumeration of the `SemanticImportType` arms this family does NOT
     // yet cover, each with the boundary fact it waits on. Documented as
     // not-yet-resolvable (never silently green): a deferred shape resolves to
     // `None` through ProviderTypeFacts today, and the differential pins that so a
     // later slice that adds the fact flips the arm deliberately.
-    //   - BuiltinNominal (`str`, `Str(N)`): no builtin-nominal identity fact.
-    //   - Slice (`[T]`): no generated slice-struct name fact.
+    //   - BuiltinNominal `Str(N)`: a generated fixed-capacity struct whose durable
+    //     identity is a generated-struct classification (`export_type_local`
+    //     rejects it as a `ForeignLocalType`), so it lands with the generated /
+    //     anonymous family → r6b, not the pure name facts r6a flips.
     //   - AnonymousNominal: produced by a body / a comptime call reducing to an
-    //     anonymous struct (`Pair()` below), materialized in r4/r6.
+    //     anonymous struct (`Pair()` below), materialized in r6b.
     //   - Module / GenericParameter: not reachable as a resolved type-syntax leaf.
+    // `str` and slice `[T]` are NO LONGER gaps — r6a flipped them (see
+    // `provider_type_facts_builtin_str_and_slice_names_match_epoch`).
     // The comptime type-call arm itself is NO LONGER a gap — r5a flipped it (see
     // `provider_type_facts_comptime_calls_match_epoch`); only the anonymous-nominal
     // RESULT of such a call is still deferred, and that deferral is pinned here.
@@ -19938,12 +20065,12 @@ mod tests {
         let mut database = RevisionedQueryDatabase::default();
         let revision = revision_for(&mut database, &snapshot);
 
-        // `str`/`[i32]`/`Str(8)`: boundary facts still absent. `Pair()`: the
-        // comptime-call op reduces it (r5a), but its result is an ANONYMOUS
-        // nominal the overlay cannot yet mint, so `reduce_fact` returns
-        // `DeferredAnonymous` and the resolution stays `None` — an honest r4/r6
-        // gap, not the "no comptime-call op" gap r2 recorded.
-        for deferred in ["str", "[i32]", "Pair()", "Str(8)"] {
+        // `Str(8)`: a generated fixed-capacity struct, deferred to r6b (see above).
+        // `Pair()`: the comptime-call op reduces it (r5a), but its result is an
+        // ANONYMOUS nominal the overlay cannot yet mint, so `reduce_fact` returns
+        // `DeferredAnonymous` and the resolution stays `None` — an honest r6b gap,
+        // not the "no comptime-call op" gap r2 recorded.
+        for deferred in ["Pair()", "Str(8)"] {
             let (resolved, _m, _d) =
                 resolve_type_via_provider(&database, revision, &scope, deferred, None);
             assert_eq!(
@@ -20654,12 +20781,47 @@ mod tests {
 
         fn method(
             &self,
-            _key: &StableDefinitionKey,
+            key: &StableDefinitionKey,
         ) -> Option<rue_air::DurableMethod<StableDefinitionKey, ModuleId>> {
-            // Deferred to r4b-3: the durable method key's receiver preimage is the
-            // owner nominal, threaded through the endpoint seam that owns
-            // receiver→pool identity. r4b-1 lands the free-function subset.
-            None
+            // r4b-3: the durable method key's receiver preimage is its owner
+            // nominal. The `Callable` payload carries the explicit parameters and
+            // result (self is separate, tracked by `has_self`); the receiver type
+            // is the owner nominal, recovered by joining the method key's
+            // `owner()` (module + kind + name) back to the owner nominal's own
+            // durable key in this set, so the pool resolves it through the same 2a
+            // nominal machinery as any parameter type.
+            use crate::durable_semantics::DurableDeclarationPayload as Payload;
+            let decl = self.by_key.get(key)?;
+            let Payload::Callable {
+                parameters,
+                result,
+                has_self,
+                ..
+            } = &decl.payload
+            else {
+                return None;
+            };
+            // A free function (no self) is not a method.
+            if !*has_self {
+                return None;
+            }
+            let owner = key.owner()?;
+            let owner_key = self
+                .by_key
+                .keys()
+                .find(|candidate| {
+                    candidate.owner().is_none()
+                        && candidate.module() == owner.module()
+                        && candidate.kind() == owner.kind()
+                        && candidate.name() == owner.name()
+                })?
+                .clone();
+            Some(rue_air::DurableMethod {
+                receiver: rue_air::SemanticImportType::Nominal(owner_key),
+                parameters: parameters.iter().map(provider_durable_param).collect(),
+                result: result.clone(),
+                has_self: *has_self,
+            })
         }
     }
 
@@ -20857,17 +21019,17 @@ mod tests {
     }
 
     #[test]
-    fn provider_call_facts_bare_owner_reversal_is_a_known_r6_divergence() {
-        // The bare-owner divergence (r4a-1 carry-forward, tied to r6), exhibited
-        // against the LIVE epoch, not documented: a trusted-std `StrBuf` carries a
-        // method, so the real declaration-bind path assigns its language item and
-        // renders its method symbol BARE (RUE-1089 exemption). A USER `Box` method
-        // renders file-qualified. Both land in the epoch's `named_method_by_
-        // callable_symbol` index; the provider path reverses the qualified one and
-        // REFUSES the bare one (no recoverable module). We assert epoch=Some AND
-        // provider=None on the SAME bare symbol, side by side — un-masking the gap
-        // the earlier `i32.get`-style probes (bare symbols the epoch ALSO refuses)
-        // left open.
+    fn provider_call_facts_lifts_bare_language_item_owner() {
+        // The bare-owner contract, r6a: a trusted-std `StrBuf` carries a method, so
+        // the real declaration-bind path assigns its language item and renders its
+        // method symbol BARE (RUE-1089 exemption). A USER `Box` method renders
+        // file-qualified. Both land in the epoch's `named_method_by_callable_symbol`
+        // index. r6a LIFTS the bare language-item class: the provider recovers the
+        // StrBuf receiver from the language-item registry, confirms the language
+        // item + member, re-renders the bare symbol byte for byte, and answers Some
+        // — matching the epoch on the SAME bare symbol. A bare owner that is NOT a
+        // known language item (an anonymous owner) stays refused — the residual
+        // owned by r6b / the flip (Probe C).
         let root_src = "struct Box { value: i32, \
              fn get(borrow self) -> i32 { self.value } }\n\
              fn main() -> i32 { 0 }\n";
@@ -20952,11 +21114,15 @@ mod tests {
         let mut database = RevisionedQueryDatabase::default();
         let revision = revision_for(&mut database, &snapshot);
 
-        // Probe A — the BARE symbol: provider=None, and the refusal fails at
-        // symbol parse (the missing `$`) BEFORE any receiver lookup, so it records
-        // NO query edge (contrast the success footprint below).
+        // Probe A — the BARE language-item symbol: r6a LIFTS it. The provider
+        // recovers the StrBuf receiver from the language-item registry, confirms
+        // the language item + member, re-renders the bare symbol byte for byte,
+        // and answers Some — matching the epoch. The success now records query
+        // edges (the receiver name lookup + the member semantic-nucleus facts) —
+        // the richer provider-era footprint that is the post-flip truth (r4a-1
+        // carry-forward: the finer dependencies are the more-correct behavior).
         let bare_outcome =
-            database.probe_body_facts(revision, semantic_configuration(), "call-bare-refuse", {
+            database.probe_body_facts(revision, semantic_configuration(), "call-bare-lift", {
                 let bare = bare_key.clone();
                 let adapter = DurableDeclSource::from_declarations(&decls);
                 move |provider| {
@@ -20966,15 +21132,47 @@ mod tests {
                 }
             });
         assert!(
-            !bare_outcome.result,
-            "the provider path refuses the bare language-item owner symbol the \
-             epoch answers — the r6-tied known divergence, exhibited"
+            bare_outcome.result,
+            "r6a lifts the bare language-item owner symbol the epoch answers: {bare_key}"
+        );
+        let bare_families: std::collections::BTreeSet<&str> = bare_outcome
+            .dependencies
+            .iter()
+            .map(|node| node.family())
+            .collect();
+        assert!(
+            bare_families.contains("compiler.lookup-name"),
+            "the bare lift observes the receiver name lookup: {bare_families:?}"
         );
         assert!(
-            bare_outcome.dependencies.is_empty(),
-            "the bare refusal fails at symbol parse (no `$`) before any lookup, so \
-             it records no query edge: {:?}",
-            bare_outcome.dependencies
+            bare_families
+                .iter()
+                .all(|family| *family == "compiler.lookup-name"
+                    || *family == "compiler.semantic-nucleus"),
+            "the bare-lift footprint is lookup-name + semantic-nucleus only: {bare_families:?}"
+        );
+
+        // Probe C — a bare owner that is NOT a known language item (an anonymous
+        // owner) stays refused: `bare_language_item_owner` returns None, so the
+        // reversal fails closed before any lookup — the residual r6b / the flip
+        // owns.
+        let residual_outcome =
+            database.probe_body_facts(revision, semantic_configuration(), "call-bare-residual", {
+                let adapter = DurableDeclSource::from_declarations(&decls);
+                move |provider| {
+                    let facts =
+                        rue_air::ProviderCallFacts::new(provider, adapter, rir_ref, interner);
+                    facts.callable_symbol_receiver("Mystery.foo").is_some()
+                }
+            });
+        assert!(
+            !residual_outcome.result,
+            "a bare non-language-item owner stays refused (the anonymous-owner residual)"
+        );
+        assert!(
+            residual_outcome.dependencies.is_empty(),
+            "the residual refusal fails before any lookup: {:?}",
+            residual_outcome.dependencies
         );
 
         // Probe B — the QUALIFIED symbol: provider=Some, and the success records
@@ -21010,6 +21208,125 @@ mod tests {
                     || *family == "compiler.semantic-nucleus"),
             "the callable-symbol success footprint is lookup-name + semantic-nucleus \
              only (r4a-1): {families:?}"
+        );
+    }
+
+    #[test]
+    fn provider_call_facts_method_info_matches_epoch() {
+        use crate::StableDefinitionKind as Kind;
+        // A named method whose receiver (`Widget`), one explicit param (`Point`),
+        // and return (`i64`) all resolve through the pool's 2a nominal machinery
+        // — the r4b-3 backlog item: the receiver preimage `(owner_file,
+        // owner_type_name)` threads through the durable method key, recovered by
+        // joining the method key's `owner()` back to the owner nominal's durable
+        // key (the `DurableDeclSource::method` receiver join).
+        let source = "pub struct Point { x: i64, y: i64 }\n\
+                      pub struct Widget { id: i64, \
+                        fn shift(borrow self, p: Point, n: i32) -> i64 { self.id } }\n\
+                      fn main() -> i32 { 0 }\n";
+        let snapshot = source_snapshot(&[(1, "/m.rue", "m.rue", source)], 1);
+        let file = FileId::new(1);
+        let decls = production_declarations(&snapshot);
+        let shift = durable_decl(&decls, Kind::Method, "shift");
+        let shift_key = shift.key.clone();
+
+        // The LIVE epoch, bound through the production declaration path — the
+        // INDEPENDENT side the provider assembly is compared against.
+        let parsed = crate::parsed_modules::parse_source_snapshot_modules(&snapshot).unwrap();
+        let merged = crate::merge_parsed_modules(&parsed).unwrap();
+        let rir = crate::lower_canonical_rir(&merged).unwrap();
+        let imports = crate::bound_definitions::test_fixture_import_graph(&merged).unwrap();
+        let bound = crate::canonical_semantic::bind_query_owned_declarations_for_test(
+            &merged,
+            &rir,
+            crate::PreviewFeatures::default(),
+            rue_target::Target::X86_64Linux,
+            &imports,
+        )
+        .expect("declarations bind");
+        let interner = rir.semantic_symbols().interner();
+        let widget_sym = interner.get("Widget").expect("Widget interned");
+        let shift_sym = interner.get("shift").expect("shift interned");
+        let prod = bound
+            .epoch_method_info(file, widget_sym, shift_sym)
+            .expect("the epoch has Widget.shift's MethodInfo");
+        let prod_receiver = bound.with_type_pool(|pool| render_pool_type(pool, prod.struct_type));
+        let prod_return = bound.with_type_pool(|pool| render_pool_type(pool, prod.return_type));
+
+        let rir_ref = rir.rir();
+        let mut database = RevisionedQueryDatabase::default();
+        let revision = revision_for(&mut database, &snapshot);
+        let source_adapter = DurableDeclSource::from_declarations(&decls);
+
+        let outcome = database.probe_body_facts(
+            revision,
+            semantic_configuration(),
+            "call-method-info",
+            move |provider| {
+                let mut facts =
+                    rue_air::ProviderCallFacts::new(provider, source_adapter, rir_ref, interner);
+                let info = facts
+                    .method_info(&shift_key, file, "Widget", "shift")
+                    .expect("Widget.shift resolves through the provider path");
+                // `named_method_info` coincides over the named differential scope
+                // (no anonymous fallback), mirroring the epoch's `methods.get`.
+                let named = facts
+                    .named_method_info(&shift_key, file, "Widget", "shift")
+                    .expect("named_method_info resolves");
+                assert_eq!(named.body, info.body, "named_method_info agrees on body");
+                // Double consult: idempotent, the pool re-mints nothing.
+                let second = facts
+                    .method_info(&shift_key, file, "Widget", "shift")
+                    .expect("repeat consult resolves");
+                assert_eq!(second.body, info.body);
+                assert_eq!(
+                    second.params, info.params,
+                    "repeat consult re-minted params"
+                );
+
+                // Explicit params (self excluded): one nominal (`Point` through
+                // 2a) and one primitive, asserted through the index-independent
+                // render / resolved-name reads.
+                let arena = facts.param_arena();
+                let names = arena.names(info.params);
+                let types = arena.types(info.params);
+                let modes = arena.modes(info.params);
+                assert_eq!(info.params.len(), 2, "self is excluded from params");
+                assert_eq!(facts.resolve_symbol(names[0]), "p");
+                assert_eq!(facts.resolve_symbol(names[1]), "n");
+                assert_eq!(render_pool_type(facts.type_pool(), types[0]), "Point");
+                assert_eq!(render_pool_type(facts.type_pool(), types[1]), "i32");
+                assert_eq!(modes[0], rue_rir::RirParamMode::Normal);
+
+                let receiver = render_pool_type(facts.type_pool(), info.struct_type);
+                let ret = render_pool_type(facts.type_pool(), info.return_type);
+                (info, receiver, ret)
+            },
+        );
+        let (info, receiver, ret) = outcome.result;
+
+        // Cross-path against the LIVE epoch `MethodInfo` (not literals):
+        // pool-independent fields directly, pool-relative types by render.
+        assert_eq!(receiver, prod_receiver, "receiver equals the epoch's");
+        assert_eq!(receiver, "Widget", "receiver is the owning nominal");
+        assert_eq!(ret, prod_return, "return equals the epoch's");
+        assert_eq!(info.has_self, prod.has_self, "has_self matches");
+        assert!(info.has_self, "shift takes self");
+        assert_eq!(info.self_mode, prod.self_mode, "self_mode matches");
+        assert_eq!(info.self_mode, rue_rir::RirParamMode::Borrow);
+        assert_eq!(info.self_is_mut, prod.self_is_mut, "self_is_mut matches");
+        assert_eq!(
+            info.body, prod.body,
+            "method body InstRef matches the epoch"
+        );
+        assert_eq!(info.span, prod.span, "method span matches the epoch");
+
+        // The P-op path consults the pool + the RIR handle, not the live provider
+        // terminals, so it records no provider edge (pool answered-by-metadata).
+        assert!(
+            outcome.dependencies.is_empty(),
+            "a pool-answered method_info records no provider edge: {:?}",
+            outcome.dependencies
         );
     }
 
@@ -21386,19 +21703,23 @@ mod tests {
 
                 // Module identity — r4b-3 / the flip (pool-refused arm).
                 let module = facts.resolve_instance_type(&T::Module(MTok::new(0, 0)));
-                // Generic parameter — r5/r6 substitution.
+                // Generic parameter — r5 substitution.
                 let generic = facts.resolve_instance_type(&T::GenericParameter(0));
-                // Slice generated-struct name beyond the pre-registered set — r6.
+                // A slice whose generated struct was NOT seeded still fails closed:
+                // the r6a `Slice` arm resolves only AFTER `register_generated_slice`
+                // (positive differential in
+                // `provider_endpoint_facts_slice_arm_resolves_after_registration`).
                 let slice = facts.resolve_instance_type(&T::Slice {
                     element: Box::new(T::I64),
                     name: std::sync::Arc::from("[]i64"),
                 });
-                // Builtin name beyond BUILTIN_ENUMS + str — r6 builtin facts.
+                // A genuine non-builtin name (not any builtin under any regime)
+                // fails closed — a permanent gap, not an r6 deferral.
                 let unknown_builtin = facts.resolve_instance_type(&T::BuiltinNominal {
                     kind: AnonymousNominalKind::Struct,
                     name: std::sync::Arc::from("NotABuiltin"),
                 });
-                // Anonymous mint-from-digest (issued-anonymous lookup only) — r6.
+                // Anonymous mint-from-digest (issued-anonymous lookup only) — r6b.
                 let anonymous =
                     facts.resolve_instance_type(&T::Nominal(N::Anonymous(AnonymousNominalKey {
                         kind: AnonymousNominalKind::Struct,
@@ -21417,10 +21738,100 @@ mod tests {
         );
         let (module, generic, slice, unknown_builtin, anonymous) = outcome.result;
         assert!(module, "module identity fails closed (r4b-3 / flip)");
-        assert!(generic, "generic parameter fails closed (r5/r6)");
-        assert!(slice, "slice generated-struct name fails closed (r6)");
-        assert!(unknown_builtin, "unknown builtin name fails closed (r6)");
-        assert!(anonymous, "anonymous mint fails closed (r6)");
+        assert!(generic, "generic parameter fails closed (r5)");
+        assert!(
+            slice,
+            "an unseeded slice generated-struct name fails closed"
+        );
+        assert!(
+            unknown_builtin,
+            "a non-builtin name fails closed (permanent)"
+        );
+        assert!(anonymous, "anonymous mint fails closed (r6b)");
+    }
+
+    // RUE-1091 r6a: the `Slice` arm resolves once a caller seeds the generated
+    // slice struct with `register_generated_slice`, minting the fat-pointer
+    // struct byte-identically to the LIVE epoch's generated slice — the positive
+    // half of the deferral this slice flips.
+    #[test]
+    fn provider_endpoint_facts_slice_arm_resolves_after_registration() {
+        use rue_air::{SemanticImportType as D, TypeInstanceKey as T};
+        // The signature slice `[i64]` makes the epoch materialize its generated
+        // slice struct at declaration bind (slices are preview-gated, ADR-0043),
+        // so it is the LIVE comparison target.
+        let source = "fn take(s: [i64]) -> i64 { 0 }\n\
+                      fn main() -> i32 { 0 }\n";
+        let snapshot = source_snapshot(&[(1, "/m.rue", "m.rue", source)], 1);
+        let slices = crate::PreviewFeatures::from_iter([crate::PreviewFeature::Slices]);
+
+        // The LIVE epoch, bound through the production declaration path with the
+        // slices preview enabled.
+        let parsed = crate::parsed_modules::parse_source_snapshot_modules(&snapshot).unwrap();
+        let merged = crate::merge_parsed_modules(&parsed).unwrap();
+        let rir = crate::lower_canonical_rir(&merged).unwrap();
+        let imports = crate::bound_definitions::test_fixture_import_graph(&merged).unwrap();
+        let bound = crate::canonical_semantic::bind_query_owned_declarations_for_test(
+            &merged,
+            &rir,
+            slices.clone(),
+            rue_target::Target::X86_64Linux,
+            &imports,
+        )
+        .expect("declarations bind");
+        let interner = rir.semantic_symbols().interner();
+        let slice_sym = interner
+            .get("[i64]")
+            .expect("the epoch materialized the `[i64]` slice struct at bind");
+        let epoch_slice = bound
+            .epoch_generated_struct_type(slice_sym)
+            .expect("the epoch resolves the generated `[i64]` slice struct");
+        let epoch_render = bound.with_type_pool(|pool| endpoint_nominal_render(pool, epoch_slice));
+
+        let rir_ref = rir.rir();
+        let mut database = RevisionedQueryDatabase::default();
+        let revision = revision_for(&mut database, &snapshot);
+        // The slice mint needs no durable nominals (its element is a primitive),
+        // so an empty durable source suffices.
+        let adapter = DurableDeclSource::from_declarations(&[]);
+
+        let outcome = database.probe_body_facts(
+            revision,
+            semantic_configuration(),
+            "endpoint-slice",
+            move |provider| {
+                let facts =
+                    rue_air::ProviderEndpointFacts::new(provider, adapter, rir_ref, interner);
+                // Seed the generated slice, then resolve the `Slice` arm.
+                facts
+                    .register_generated_slice(&D::I64, "[i64]")
+                    .expect("register mints the slice struct");
+                let key = T::Slice {
+                    element: Box::new(T::I64),
+                    name: std::sync::Arc::from("[i64]"),
+                };
+                let first = facts.resolve_instance_type(&key).expect("slice resolves");
+                // Idempotency: a repeat consult returns the same id.
+                let second = facts
+                    .resolve_instance_type(&key)
+                    .expect("slice re-resolves");
+                assert_eq!(first, second, "repeat slice resolution diverged");
+                facts.with_type_pool(|pool| endpoint_nominal_render(pool, first))
+            },
+        );
+        // The provider-minted slice renders identically to the LIVE epoch's
+        // generated slice struct (name, copyability, visibility, symbol, fields).
+        assert_eq!(
+            outcome.result, epoch_render,
+            "the provider slice renders identically to the epoch generated slice"
+        );
+        // A pool-answered materialization records no provider query edge (edge
+        // honesty — the slice identity is minted, not a boundary lookup).
+        assert!(
+            outcome.dependencies.is_empty(),
+            "the seeded slice resolution records no provider edge: {:?}",
+            outcome.dependencies
+        );
     }
 
     #[test]
@@ -21551,6 +21962,370 @@ mod tests {
                 .any(|node| node.family() == "compiler.lookup-name"),
             "nominal presence observes the name-lookup terminal: {:?}",
             outcome.dependencies
+        );
+    }
+
+    // ---- RUE-1091 r4b-3: aggregate ProviderFacts differentials ----------------
+    //
+    // These prove `rue_air::ProviderAggregateFacts` (the provider-driven
+    // realization of the family-1D `AggregateFacts` seam) selects the same
+    // aggregate/field/variant winner the epoch does. The selection ORDER lives in
+    // the provider-generic free functions the driver merely supplies facts to
+    // (`select_module_type_member`'s struct→enum→const short-circuit,
+    // `select_qualified_type`'s enum→struct, `select_struct_literal_head`'s
+    // const→struct→builtin) — so the driver and the epoch replay the exact r1c
+    // candidate order. The driver reuses the shared `DurableDeclSource` (the r4b-1
+    // durable set) for its 2a pool; the comparison target is the LIVE epoch's own
+    // selection (`BoundSema::epoch_module_type_member` / `_qualified_type` /
+    // `_struct_literal_head` / `_is_accessible`), rendered index-independently.
+    //
+    // Scope landed here: struct/enum-by-file-name (P, pool mint via the overlay
+    // reverse), the builtins (P, pool pre-registered set), and `is_accessible`
+    // (O, request-local file paths). Deferred with cause (pinned, never silently
+    // answered wrong): the const fall-through (`value_const` / `module_binding`) →
+    // the flip's const-declaration RIR handle, so a const member selects `Absent`
+    // where the epoch selects `Const`; `module_def` + the module spines → the
+    // flip; `source_path` → the flip.
+
+    /// The tag + index-independent display of a [`rue_air::ProviderModuleMember`],
+    /// rendered through the pool that minted its type.
+    fn describe_member(
+        member: &rue_air::ProviderModuleMember,
+        pool: &rue_air::TypeInternPool,
+    ) -> (&'static str, Option<String>) {
+        match member {
+            rue_air::ProviderModuleMember::Struct(ty) => {
+                ("struct", Some(endpoint_display(pool, *ty)))
+            }
+            rue_air::ProviderModuleMember::Enum(ty) => ("enum", Some(endpoint_display(pool, *ty))),
+            rue_air::ProviderModuleMember::Const => ("const", None),
+            rue_air::ProviderModuleMember::Absent => ("absent", None),
+        }
+    }
+
+    /// The tag + display of a [`rue_air::ProviderQualifiedType`].
+    fn describe_qualified(
+        qualified: &rue_air::ProviderQualifiedType,
+        pool: &rue_air::TypeInternPool,
+    ) -> (&'static str, Option<String>) {
+        match qualified {
+            rue_air::ProviderQualifiedType::Enum(ty) => ("enum", Some(endpoint_display(pool, *ty))),
+            rue_air::ProviderQualifiedType::Struct(ty) => {
+                ("struct", Some(endpoint_display(pool, *ty)))
+            }
+            rue_air::ProviderQualifiedType::Absent => ("absent", None),
+        }
+    }
+
+    #[test]
+    fn provider_aggregate_facts_nominal_and_builtin_match_epoch() {
+        use crate::StableDefinitionKind as Kind;
+        // A user struct and enum (minted through the pool's 2a machinery via the
+        // `(file, name)` overlay reverse) plus the pool's pre-registered builtins.
+        let source = "pub struct Point { x: i64, y: i64 }\n\
+                      pub enum Color { Red, Green }\n\
+                      fn main() -> i32 { 0 }\n";
+        let snapshot = source_snapshot(&[(1, "/m.rue", "m.rue", source)], 1);
+        let file = FileId::new(1);
+        let decls = production_declarations(&snapshot);
+        let point_key = durable_decl(&decls, Kind::Struct, "Point").key.clone();
+        let color_key = durable_decl(&decls, Kind::Enum, "Color").key.clone();
+
+        let parsed = crate::parsed_modules::parse_source_snapshot_modules(&snapshot).unwrap();
+        let merged = crate::merge_parsed_modules(&parsed).unwrap();
+        let rir = crate::lower_canonical_rir(&merged).unwrap();
+        let imports = crate::bound_definitions::test_fixture_import_graph(&merged).unwrap();
+        let bound = crate::canonical_semantic::bind_query_owned_declarations_for_test(
+            &merged,
+            &rir,
+            crate::PreviewFeatures::default(),
+            rue_target::Target::X86_64Linux,
+            &imports,
+        )
+        .expect("declarations bind");
+        let interner = rir.semantic_symbols().interner();
+        let point_sym = interner.get("Point").expect("Point interned");
+        let color_sym = interner.get("Color").expect("Color interned");
+        let epoch_point = bound.with_type_pool(|pool| {
+            endpoint_display(pool, bound.epoch_nominal_type(file, point_sym).unwrap())
+        });
+        let epoch_color = bound.with_type_pool(|pool| {
+            endpoint_display(pool, bound.epoch_nominal_type(file, color_sym).unwrap())
+        });
+
+        let mut facts =
+            rue_air::ProviderAggregateFacts::new(DurableDeclSource::from_declarations(&decls));
+        facts.register_named_nominal(point_key, file, "Point");
+        facts.register_named_nominal(color_key, file, "Color");
+
+        let point = facts.struct_in_file(file, "Point").expect("Point resolves");
+        let point_again = facts
+            .struct_in_file(file, "Point")
+            .expect("repeat resolves");
+        assert_eq!(point, point_again, "repeat consult dedups the nominal");
+        let color = facts.enum_in_file(file, "Color").expect("Color resolves");
+        let str_ty = facts.builtin_struct("str").expect("builtin str resolves");
+        let arch_ty = facts
+            .builtin_enum("Arch")
+            .expect("builtin Arch enum resolves");
+
+        // A struct is not an enum and vice versa (kind-filtered by the id kind).
+        assert!(
+            facts.enum_in_file(file, "Point").is_none(),
+            "Point is not an enum"
+        );
+        assert!(
+            facts.struct_in_file(file, "Color").is_none(),
+            "Color is not a struct"
+        );
+        assert!(
+            facts.struct_in_file(file, "Absent").is_none(),
+            "absent fails closed"
+        );
+        assert!(
+            facts.builtin_struct("NotABuiltin").is_none(),
+            "unknown builtin fails closed"
+        );
+
+        facts.with_type_pool(|pool| {
+            assert_eq!(
+                endpoint_display(pool, point),
+                epoch_point,
+                "Point matches the epoch"
+            );
+            assert_eq!(endpoint_display(pool, point), "Point");
+            assert_eq!(
+                endpoint_display(pool, color),
+                epoch_color,
+                "Color matches the epoch"
+            );
+            assert_eq!(endpoint_display(pool, color), "Color");
+            // Builtins are pre-registered identically to a fresh import epoch.
+            assert_eq!(endpoint_display(pool, str_ty), "str");
+            assert_eq!(endpoint_display(pool, arch_ty), "Arch");
+        });
+    }
+
+    #[test]
+    fn provider_aggregate_facts_selection_order_matches_epoch() {
+        use crate::StableDefinitionKind as Kind;
+        // A struct, an enum, and a value constant sharing one module: the
+        // struct→enum→const short-circuit is exercised, and the const arm is the
+        // pinned deferred divergence.
+        let source = "pub struct Point { x: i64 }\n\
+                      pub enum Color { Red, Green }\n\
+                      pub const LIMIT: i64 = 7;\n\
+                      fn main() -> i32 { 0 }\n";
+        let snapshot = source_snapshot(&[(1, "/m.rue", "m.rue", source)], 1);
+        let file = FileId::new(1);
+        let decls = production_declarations(&snapshot);
+        let point_key = durable_decl(&decls, Kind::Struct, "Point").key.clone();
+        let color_key = durable_decl(&decls, Kind::Enum, "Color").key.clone();
+
+        let parsed = crate::parsed_modules::parse_source_snapshot_modules(&snapshot).unwrap();
+        let merged = crate::merge_parsed_modules(&parsed).unwrap();
+        let rir = crate::lower_canonical_rir(&merged).unwrap();
+        let imports = crate::bound_definitions::test_fixture_import_graph(&merged).unwrap();
+        let bound = crate::canonical_semantic::bind_query_owned_declarations_for_test(
+            &merged,
+            &rir,
+            crate::PreviewFeatures::default(),
+            rue_target::Target::X86_64Linux,
+            &imports,
+        )
+        .expect("declarations bind");
+        let interner = rir.semantic_symbols().interner();
+        let point_sym = interner.get("Point").expect("Point interned");
+        let color_sym = interner.get("Color").expect("Color interned");
+        let limit_sym = interner.get("LIMIT").expect("LIMIT interned");
+
+        let mut facts =
+            rue_air::ProviderAggregateFacts::new(DurableDeclSource::from_declarations(&decls));
+        facts.register_named_nominal(point_key, file, "Point");
+        facts.register_named_nominal(color_key, file, "Color");
+
+        // select_module_type_member: struct wins first, enum second, const arm is
+        // deferred (Absent where the epoch answers Const), absent last.
+        let member_point = facts.select_module_type_member(file, "Point");
+        let member_color = facts.select_module_type_member(file, "Color");
+        let member_limit = facts.select_module_type_member(file, "LIMIT");
+        let member_absent = facts.select_module_type_member(file, "Ghost");
+        // select_qualified_type: enum→struct order.
+        let qualified_color = facts.select_qualified_type(file, "Color");
+        let qualified_point = facts.select_qualified_type(file, "Point");
+        // select_qualified_enum: enum only.
+        let qenum_color = facts.select_qualified_enum(file, "Color");
+        let qenum_point = facts.select_qualified_enum(file, "Point");
+        // select_struct_literal_head: unqualified head → Named for a struct.
+        let head_point = facts.select_struct_literal_head(file, "Point");
+
+        let (mp_tag, mp_disp) = facts.with_type_pool(|pool| describe_member(&member_point, pool));
+        let (mc_tag, mc_disp) = facts.with_type_pool(|pool| describe_member(&member_color, pool));
+        let (ml_tag, _) = facts.with_type_pool(|pool| describe_member(&member_limit, pool));
+        let (ma_tag, _) = facts.with_type_pool(|pool| describe_member(&member_absent, pool));
+        let (qc_tag, qc_disp) =
+            facts.with_type_pool(|pool| describe_qualified(&qualified_color, pool));
+        let (qp_tag, qp_disp) =
+            facts.with_type_pool(|pool| describe_qualified(&qualified_point, pool));
+
+        // Epoch winners for the same members.
+        let epoch_point = bound.epoch_module_type_member(file, point_sym);
+        let epoch_color = bound.epoch_module_type_member(file, color_sym);
+        let epoch_limit = bound.epoch_module_type_member(file, limit_sym);
+        let (ep_tag, ep_disp) = bound.with_type_pool(|pool| describe_member(&epoch_point, pool));
+        let (ec_tag, ec_disp) = bound.with_type_pool(|pool| describe_member(&epoch_color, pool));
+        let (el_tag, _) = bound.with_type_pool(|pool| describe_member(&epoch_limit, pool));
+
+        // Struct arm: provider == epoch.
+        assert_eq!(
+            (mp_tag, &mp_disp),
+            (ep_tag, &ep_disp),
+            "struct member matches epoch"
+        );
+        assert_eq!(mp_tag, "struct");
+        assert_eq!(mp_disp.as_deref(), Some("Point"));
+        // Enum arm: provider == epoch.
+        assert_eq!(
+            (mc_tag, &mc_disp),
+            (ec_tag, &ec_disp),
+            "enum member matches epoch"
+        );
+        assert_eq!(mc_tag, "enum");
+        assert_eq!(mc_disp.as_deref(), Some("Color"));
+        // Const arm: the pinned divergence — epoch selects Const, provider Absent.
+        assert_eq!(el_tag, "const", "the epoch selects the const member");
+        assert_eq!(
+            ml_tag, "absent",
+            "the provider defers the const arm (flip const RIR handle)"
+        );
+        // Absent: both agree there is no member.
+        assert_eq!(ma_tag, "absent");
+
+        // Qualified selection: enum→struct order, matching the epoch's discriminant.
+        let epoch_q_color = bound.epoch_qualified_type(file, color_sym);
+        let epoch_q_point = bound.epoch_qualified_type(file, point_sym);
+        let (eqc_tag, eqc_disp) =
+            bound.with_type_pool(|pool| describe_qualified(&epoch_q_color, pool));
+        let (eqp_tag, eqp_disp) =
+            bound.with_type_pool(|pool| describe_qualified(&epoch_q_point, pool));
+        assert_eq!(
+            (qc_tag, &qc_disp),
+            (eqc_tag, &eqc_disp),
+            "qualified enum matches epoch"
+        );
+        assert_eq!(qc_tag, "enum");
+        assert_eq!(
+            (qp_tag, &qp_disp),
+            (eqp_tag, &eqp_disp),
+            "qualified struct matches epoch"
+        );
+        assert_eq!(qp_tag, "struct");
+
+        // select_qualified_enum: enum resolves, struct does not.
+        assert!(qenum_color.is_some(), "Color qualified-enum resolves");
+        assert!(qenum_point.is_none(), "Point is not a qualified enum");
+
+        // select_struct_literal_head: unqualified struct head → Named.
+        match head_point {
+            rue_air::ProviderStructHead::Named(ty) => {
+                assert_eq!(
+                    facts.with_type_pool(|pool| endpoint_display(pool, ty)),
+                    "Point"
+                );
+            }
+            _ => panic!("Point struct head should be Named"),
+        }
+        // The epoch's head agrees.
+        match bound.epoch_struct_literal_head(file, point_sym) {
+            rue_air::ProviderStructHead::Named(_) => {}
+            _ => panic!("epoch Point head should be Named"),
+        }
+    }
+
+    #[test]
+    fn provider_aggregate_facts_is_accessible_matches_epoch() {
+        // Two files in DISTINCT directories: the visibility domain is the parent
+        // directory, so a private item is visible within its own file but not
+        // across directories; a public item is visible either way. The driver
+        // reproduces the epoch's decision from the SAME registered physical paths
+        // (a request-local body-query input, not a durable fact — no
+        // seam-signature change), proving the visibility short-circuit.
+        let root_src = "pub struct A { x: i32 }\n\
+             fn main() -> i32 { 0 }\n";
+        let leaf_src = "pub struct B { y: i32 }\n";
+        let root_file = FileId::new(1);
+        let leaf_file = FileId::new(2);
+        let metadata = SourceMetadata::new_with_trusted_standard_library(
+            root_file,
+            HashMap::from([
+                (root_file, "/project/main.rue".to_owned()),
+                (leaf_file, "/project/std/leaf.rue".to_owned()),
+            ]),
+            HashMap::from([
+                (root_file, "main.rue".to_owned()),
+                (leaf_file, "\0rue-std/leaf.rue".to_owned()),
+            ]),
+            std::collections::HashSet::from([leaf_file]),
+        )
+        .expect("trusted-std metadata is valid");
+        let snapshot = SourceSnapshot::new(
+            metadata,
+            vec![
+                (root_file, Arc::new(root_src.to_owned())),
+                (leaf_file, Arc::new(leaf_src.to_owned())),
+            ],
+        )
+        .expect("two-file snapshot is valid");
+
+        let parsed = crate::parsed_modules::parse_source_snapshot_modules(&snapshot).unwrap();
+        let merged = crate::merge_parsed_modules(&parsed).unwrap();
+        let rir = crate::lower_canonical_rir(&merged).unwrap();
+        let imports = crate::bound_definitions::test_fixture_import_graph(&merged).unwrap();
+        let bound = crate::canonical_semantic::bind_query_owned_declarations_for_test(
+            &merged,
+            &rir,
+            crate::PreviewFeatures::default(),
+            rue_target::Target::X86_64Linux,
+            &imports,
+        )
+        .expect("declarations bind");
+        let decls = production_declarations(&snapshot);
+
+        // No K-typed argument pins the pool key here (is_accessible is path-only),
+        // so name the durable key / module explicitly.
+        let mut facts = rue_air::ProviderAggregateFacts::<StableDefinitionKey, ModuleId, _>::new(
+            DurableDeclSource::from_declarations(&decls),
+        );
+        // Register the SAME physical paths the epoch's `get_file_path` returns.
+        facts.register_file_path(root_file, &bound.epoch_file_path(root_file).unwrap());
+        facts.register_file_path(leaf_file, &bound.epoch_file_path(leaf_file).unwrap());
+
+        // Every combination of (accessing, defining, is_public) must match the
+        // epoch's decision from the same paths.
+        for &accessing in &[root_file, leaf_file] {
+            for &defining in &[root_file, leaf_file] {
+                for &is_public in &[false, true] {
+                    assert_eq!(
+                        facts.is_accessible(accessing, defining, is_public),
+                        bound.epoch_is_accessible(accessing, defining, is_public),
+                        "is_accessible parity for accessing={accessing:?} defining={defining:?} pub={is_public}"
+                    );
+                }
+            }
+        }
+        // Spot the load-bearing rows: same file sees private; cross-directory
+        // private is hidden; public crosses.
+        assert!(
+            facts.is_accessible(root_file, root_file, false),
+            "same file sees private"
+        );
+        assert!(
+            !facts.is_accessible(root_file, leaf_file, false),
+            "cross-dir private hidden"
+        );
+        assert!(
+            facts.is_accessible(root_file, leaf_file, true),
+            "public crosses directories"
         );
     }
 

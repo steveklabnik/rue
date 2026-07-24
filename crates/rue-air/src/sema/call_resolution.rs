@@ -95,9 +95,15 @@ pub(in crate::sema) trait CallResolutionFacts {
     /// `Sema::named_method_by_callable_symbol`.
     fn named_method_by_callable_symbol(&self, name: Spur) -> Option<(StructId, Spur, MethodInfo)>;
 
-    /// The named-method RIR declaration for `(struct, name)`. Mirrors
-    /// `named_method_declarations.get`.
-    fn named_method_declaration(&self, struct_id: StructId, name: Spur) -> Option<InstRef>;
+    /// The named-method RIR declaration for the durable-available
+    /// `(owner_file, owner_type_name, method_name)` preimage. Mirrors
+    /// `structs_by_file_name.get` followed by `named_method_declarations.get`.
+    fn named_method_declaration(
+        &self,
+        owner_file: FileId,
+        owner_type_name: Spur,
+        method_name: Spur,
+    ) -> Option<InstRef>;
 
     /// The module definition for a module id. Mirrors
     /// `module_registry.get_def`.
@@ -159,10 +165,19 @@ impl CallResolutionFacts for EpochFacts<'_, '_> {
             .map(|(struct_id, method, info)| (struct_id, method, *info))
     }
 
-    fn named_method_declaration(&self, struct_id: StructId, name: Spur) -> Option<InstRef> {
+    fn named_method_declaration(
+        &self,
+        owner_file: FileId,
+        owner_type_name: Spur,
+        method_name: Spur,
+    ) -> Option<InstRef> {
+        let struct_id = self
+            .sema
+            .structs_by_file_name
+            .get(&(owner_file, owner_type_name))?;
         self.sema
             .named_method_declarations
-            .get(&(struct_id, name))
+            .get(&(*struct_id, method_name))
             .copied()
     }
 
@@ -254,17 +269,27 @@ pub(in crate::sema) fn resolve_static_call_reference<P: CallResolutionFacts>(
 //   - named_method_declaration                                        → P (BodyRirIndex)
 //   - named_method_by_callable_symbol                                 → B (callable_symbol_method)
 //   - function_contains / resolve_function_name_local                 → C (lookup)
-// Deferred here, each with its unblocking slice named (reported, never silently
-// answered wrong):
-//   - method_info / named_method_info → r4b-3 (the endpoint seam that owns
-//     receiver→pool identity; the durable method key's receiver preimage is the
-//     owner nominal, threaded there).
-//   - value_const / module_binding / resolve_const_info_in_file → r4b-3: a
-//     `ConstInfo` carries a declaration `span` the position-free provider
-//     boundary omits, needing a const-declaration RIR handle (the const twin of
-//     the function/method handles).
-//   - module_def → r4b-3 / the flip: it answers a rue-air-internal `ModuleId`
-//     registry index the provider has no durable preimage for.
+// Disposition (updated by slice r4b-3, which owned this backlog):
+//   - method_info / named_method_info → LANDED (r4b-3). The receiver preimage
+//     `(owner_file, owner_type_name)` threads through the durable method key: the
+//     inherent `method_info` composes the pool's durable method subset (receiver
+//     through 2a) with the RIR handle the RIR index locates for the preimage. The
+//     rue-compiler differential recovers the receiver by joining the method key's
+//     `owner()` back to the owner nominal's durable key.
+//   - value_const / module_binding / resolve_const_info_in_file → RE-DEFERRED to
+//     the flip. Sharpened reason: a `ConstInfo` carries both a declaration `span`
+//     the position-free provider boundary omits (needs a const-declaration RIR
+//     handle — the const twin of the function/method handles) AND a
+//     comptime-evaluated `value` the durable const payload carries but the body
+//     identity pool has no const-minting arm for yet. Both are flip-slice work.
+//   - module_def → RE-DEFERRED to the flip. Sharpened reason: it answers a
+//     rue-air-internal `ModuleId` registry index the provider has no durable
+//     preimage for; the module-facts + logical-path composition an equivalent
+//     could be built from belongs with the flip's module registry.
+//   - named_method_declaration → LANDED (flip-prep). Both seams now take the
+//     provider-natural `(owner_file, owner_type_name, method_name)` preimage;
+//     the epoch adapter alone translates it through `structs_by_file_name` to
+//     the epoch map's `(StructId, method_name)` key.
 //   - source_function_name under specialization → r5 (the specialization name
 //     map); identity otherwise.
 // ---------------------------------------------------------------------------
@@ -387,14 +412,9 @@ where
     /// `named_method_declarations.get` under the `struct_by_file_name`
     /// bijection.
     ///
-    /// This driver keys the op by the preimage DIRECTLY (provider-natural), which
-    /// IS the r4a-2c "prefer rethreading" resolution: it never mints or consults a
-    /// pool `StructId`, so the endpoint seam's production trait signature stays
-    /// untouched. The `StructId`-keyed `CallResolutionFacts::named_method_
-    /// declaration(StructId, name)` trait impl — which must map its incoming
-    /// `StructId` back to this preimage — is the endpoint-seam slice r4b-3's
-    /// concern (it owns receiver→pool identity); r4b-1 exposes the preimage-keyed
-    /// answer the flip will drive.
+    /// This driver keys the op by the preimage directly (provider-natural), the
+    /// r4a-2c "prefer rethreading" resolution. It never mints or consults a pool
+    /// `StructId`; the production seam now carries this same preimage.
     pub fn named_method_declaration(
         &self,
         owner_file: FileId,

@@ -424,17 +424,25 @@ from the symbol → confirm the nominal and member via the existing `lookup_unqu
 index; that is the boundary-honest form of "a reverse index built from the durable declaration set,"
 and it fails closed on absent, ambiguous-receiver, wrong-`self`-form, and non-matching-render inputs.
 
+**r4b-3 review carry-forwards (flip obligations, not defects).**
+- **The aggregate driver's `by_file_name` overlay needs a stated flip-era fill source.** Its
+  zero-provider-edge property is complete only if the flip fills it from the durable declaration
+  set (keys already carry module/kind/name), or records edges at an upstream lookup. The flip
+  slice states which and asserts the edge story (also doc'd at `register_named_nominal`).
+- **The production receiver-join adapter must be keyed.** The test fixture's
+  `DurableCallableSource::method` recovers the owner nominal by linear scan; the flip-era
+  production adapter keys the `owner() → owner-nominal` recovery.
+
 **r4a-2c review carry-forwards (r4b obligations, not defects).**
 - **Span-source equivalence is a contract, not a coincidence.** The capstone handle fills
   `span`/`file_id` from the declaration's `inst.span`; production's FunctionInfo sources them from
   `shell.declaration_span`. They coincide for inline declarations, and r4b's real handle-fill must
   preserve `inst.span == shell.declaration_span` (or source from the shell) — assert it, don't
   assume it.
-- **The endpoint trait's `named_method_declaration(StructId, name)` signature needs a seam
-  translation in r4b.** The pool answers by the durable preimage `(owner_file, owner_type_name,
-  method_name)` and mints its own StructIds, so the pool-backed impl must either rethread the seam
-  to pass the preimage (the one_body.rs consumer already computes it at the call site) or keep a
-  `StructId → (file, name)` reverse map. Prefer rethreading.
+- **The endpoint trait's `named_method_declaration` seam is rethreaded.** Both production traits
+  now take the durable preimage `(owner_file, owner_type_name, method_name)`. `one_body.rs` passes
+  the preimage it already used to derive the epoch `StructId`; `analysis.rs` passes the named
+  owner's `StructDef.file_id` and interned source name. No pool-side reverse map is needed.
 
 **r4a-1 review carry-forwards (recorded obligations, not defects).**
 - **Bare-owner reversal divergence → r4b differential xfail.** The epoch's callable index contains

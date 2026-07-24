@@ -32,6 +32,7 @@ mod semantic_identity;
 mod semantic_import;
 mod semantic_type_resolution;
 pub mod specialize;
+pub mod stable_digest;
 mod type_encoding;
 #[cfg(test)]
 mod type_properties;
@@ -88,7 +89,8 @@ pub use sema::{
     OneBodyCanonicalArtifact, OneBodyDependency, OneBodyInterruption, OneBodyNonTerminalReason,
     OneBodyRequest, OneBodyTransactionOutcome, OperatorMemberCandidate, OperatorName,
     OrdinaryFreeFunctionDependencyEvent, ParamSlotModes, PerBodyDeclarationContextWork,
-    ProviderCallFacts, ProviderDefinitionKind, ProviderEndpointFacts, ProviderNamespace,
+    ProviderAggregateFacts, ProviderCallFacts, ProviderDefinitionKind, ProviderEndpointFacts,
+    ProviderModuleMember, ProviderNamespace, ProviderQualifiedType, ProviderStructHead,
     RirDeclarationIndexWork, Sema, SemaMetadata, SemaOutput, SemanticAnonymousMethodSignature,
     SemanticAnonymousMethodType, SemanticAnonymousNominalExport, SemanticAnonymousNominalIdentity,
     SemanticAnonymousNominalShape, SemanticBinding, SemanticBindingManifest,
